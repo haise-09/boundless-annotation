@@ -1,9 +1,9 @@
 (() => {
   'use strict';
   const $=id=>document.getElementById(id);
-  const ui=Object.fromEntries(['file','json','json-current','yolo','yolo-all','undo','clear','reset','drop','empty','image-wrap','image','overlay','meta','status','classes','class-count','annotations','count','label-input','description-input','rename','delete','label-dialog','label-form','cancel-label','new-label','new-description','image-count','image-list','previous','next','position','tool-select','tool-pan','tool-box','tool-line','tool-point','tool-polygon','finish-polygon','zoom-in','zoom-out','zoom-fit','zoom-level'].map(id=>[id,$(id)]));
+  const ui=Object.fromEntries(['file','json','json-current','yolo','yolo-all','undo','clear','reset','drop','empty','image-wrap','image','overlay','crosshair','crosshair-coordinates','meta','status','classes','class-count','annotations','count','label-input','description-input','rename','delete','label-dialog','label-form','cancel-label','new-label','new-description','image-count','image-list','previous','next','position','tool-select','tool-pan','tool-box','tool-line','tool-point','tool-polygon','finish-polygon','zoom-in','zoom-out','zoom-fit','zoom-level'].map(id=>[id,$(id)]));
   const project={images:[]};
-  let activeId=null,draft=null,polygonDraft=null,pending=null,editDraft=null,panDraft=null,lastLabel='',session=0,tool='box',spacePan=false;
+  let activeId=null,draft=null,polygonDraft=null,pending=null,editDraft=null,panDraft=null,lastLabel='',session=0,tool='box',spacePan=false,lastPointer=null;
   const active=()=>project.images.find(item=>item.id===activeId)||null;
   const boxes=()=>active()?.annotations||[];
   const status=message=>{ui.status.textContent=message;};
@@ -16,12 +16,14 @@
   const coords=b=>b.type==='polygon'?`${b.points.length} vertices: ${b.points.map(p=>`(${p.x}, ${p.y})`).join(' ')}`:b.type==='line'?`(${b.x1}, ${b.y1}) → (${b.x2}, ${b.y2})`:b.type==='point'?`x: ${b.x}  y: ${b.y}`:`x: ${b.x}  y: ${b.y}  w: ${b.width}  h: ${b.height}`;
   const effectiveTool=()=>spacePan?'pan':tool;
   const toolMessage={select:'Select a shape to move it. Drag its handles to edit it.',pan:'Pan: drag the image to move around. Hold Space to pan temporarily.',box:'Box: drag on the image to draw. Esc cancels a drawing.',line:'Line: drag from start to end. Esc cancels a drawing.',point:'Point: click on the image to mark a location.',polygon:'Polygon: click three or more vertices, then click the first vertex, Finish polygon, or press Enter. Esc cancels.'};
-  function showTool(){const current=effectiveTool();for(const name of ['select','pan','box','line','point','polygon'])ui[`tool-${name}`].setAttribute('aria-pressed',String(current===name));ui.overlay.classList.toggle('select-mode',current==='select');ui.overlay.classList.toggle('pan-mode',current==='pan');status(toolMessage[current]);}
+  function hideCrosshair(){ui.crosshair.hidden=true;}
+  function updateCrosshair(e){lastPointer={x:e.clientX,y:e.clientY};const image=active();if(!image||effectiveTool()==='pan'||ui['label-dialog'].open){hideCrosshair();return;}const r=ui.overlay.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;if(x<0||y<0||x>r.width||y>r.height){hideCrosshair();return;}const p=point(e);ui.crosshair.style.setProperty('--guide-x',`${x}px`);ui.crosshair.style.setProperty('--guide-y',`${y}px`);ui.crosshair.classList.toggle('flip-x',x>r.width/2);ui.crosshair.classList.toggle('flip-y',y>r.height/2);ui['crosshair-coordinates'].textContent=`x: ${Math.round(p.x)}  y: ${Math.round(p.y)}`;ui.crosshair.hidden=false;}
+  function showTool(){const current=effectiveTool();for(const name of ['select','pan','box','line','point','polygon'])ui[`tool-${name}`].setAttribute('aria-pressed',String(current===name));ui.overlay.classList.toggle('select-mode',current==='select');ui.overlay.classList.toggle('pan-mode',current==='pan');if(current==='pan')hideCrosshair();else if(lastPointer)updateCrosshair({clientX:lastPointer.x,clientY:lastPointer.y});status(toolMessage[current]);}
   function chooseTool(next){if(next===tool)return;if(next==='pan'&&tool==='polygon'||next==='polygon'&&tool==='pan'&&polygonDraft){cancelDraft(true);}else closeDrawing();tool=next;if(polygonDraft){polygonDraft.cursor=null;drawPolygonDraft();}showTool();}
   for(const name of ['select','pan','box','line','point','polygon'])ui[`tool-${name}`].addEventListener('click',()=>chooseTool(name));
   function fitWidth(image){return Math.min(image.width,ui.drop.clientWidth-2,Math.max(100,window.innerHeight*.7)*image.width/image.height);}
   function updateZoom(){const image=active();ui['zoom-level'].textContent=image?`${Math.round((image.zoom||1)*100)}%`:'100%';for(const id of ['zoom-in','zoom-out','zoom-fit'])ui[id].disabled=!image;if(image){ui['image-wrap'].style.width=`${fitWidth(image)*(image.zoom||1)}px`;}}
-  function zoomTo(value){const image=active();if(!image)return;const oldWidth=ui['image-wrap'].getBoundingClientRect().width,centerX=ui.drop.scrollLeft+ui.drop.clientWidth/2,centerY=ui.drop.scrollTop+ui.drop.clientHeight/2;image.zoom=clamp(value,.25,8);updateZoom();const ratio=ui['image-wrap'].getBoundingClientRect().width/oldWidth;if(Number.isFinite(ratio)){ui.drop.scrollLeft=centerX*ratio-ui.drop.clientWidth/2;ui.drop.scrollTop=centerY*ratio-ui.drop.clientHeight/2;}}
+  function zoomTo(value){hideCrosshair();lastPointer=null;const image=active();if(!image)return;const oldWidth=ui['image-wrap'].getBoundingClientRect().width,centerX=ui.drop.scrollLeft+ui.drop.clientWidth/2,centerY=ui.drop.scrollTop+ui.drop.clientHeight/2;image.zoom=clamp(value,.25,8);updateZoom();const ratio=ui['image-wrap'].getBoundingClientRect().width/oldWidth;if(Number.isFinite(ratio)){ui.drop.scrollLeft=centerX*ratio-ui.drop.clientWidth/2;ui.drop.scrollTop=centerY*ratio-ui.drop.clientHeight/2;}}
   ui['zoom-in'].addEventListener('click',()=>zoomTo((active()?.zoom||1)*1.25));ui['zoom-out'].addEventListener('click',()=>zoomTo((active()?.zoom||1)/1.25));ui['zoom-fit'].addEventListener('click',()=>{zoomTo(1);ui.drop.scrollTo(0,0);});
   new ResizeObserver(updateZoom).observe(ui.drop);
   function bindShape(element,image,b){element.addEventListener('pointerdown',e=>{if(tool!=='select'||e.button!==0)return;e.preventDefault();e.stopPropagation();if(image.selected!==b.id){image.selected=b.id;render();}startEdit(e,image,b,'move');});element.addEventListener('click',e=>{if(effectiveTool()==='select')e.stopPropagation();});}
@@ -35,6 +37,7 @@
     render();
   }
   function render(){
+    hideCrosshair();lastPointer=null;
     const image=active(),annotations=boxes(),selected=image?.selected,index=project.images.findIndex(item=>item.id===activeId);
     ui.empty.hidden=!!image;ui['image-wrap'].hidden=!image;
     if(image&&ui.image.dataset.imageId!==image.id){ui.image.src=image.url;ui.image.dataset.imageId=image.id;}
@@ -166,12 +169,12 @@
     el.style.left=`${x/image.width*100}%`;el.style.top=`${y/image.height*100}%`;
     el.style.width=`${Math.abs(draft.end.x-draft.start.x)/image.width*100}%`;el.style.height=`${Math.abs(draft.end.y-draft.start.y)/image.height*100}%`;
   }
-  function requestLabel(type,shape){pending={imageId:activeId,type,shape};ui['new-label'].value=lastLabel;ui['new-description'].value='';ui['label-dialog'].showModal();ui['new-label'].focus();ui['new-label'].select();}
+  function requestLabel(type,shape){hideCrosshair();pending={imageId:activeId,type,shape};ui['new-label'].value=lastLabel;ui['new-description'].value='';ui['label-dialog'].showModal();ui['new-label'].focus();ui['new-label'].select();}
   ui.overlay.addEventListener('pointerdown',e=>{if(!active()||pending||e.button!==0||effectiveTool()==='select')return;e.preventDefault();if(effectiveTool()==='pan'){panDraft={pointer:e.pointerId,x:e.clientX,y:e.clientY,left:ui.drop.scrollLeft,top:ui.drop.scrollTop};ui.overlay.setPointerCapture(e.pointerId);ui.overlay.classList.add('panning');return;}const start=point(e);
     if(effectiveTool()==='polygon'){addPolygonVertex(start);return;}
     if(effectiveTool()==='point'){requestLabel('point',{x:Math.round(start.x),y:Math.round(start.y)});return;}
     draft={pointer:e.pointerId,start,end:start,imageId:activeId,type:effectiveTool()};ui.overlay.setPointerCapture(e.pointerId);drawDraft();});
-  ui.overlay.addEventListener('pointermove',e=>{if(editDraft){moveEdit(e);return;}if(panDraft&&e.pointerId===panDraft.pointer){ui.drop.scrollLeft=panDraft.left+panDraft.x-e.clientX;ui.drop.scrollTop=panDraft.top+panDraft.y-e.clientY;return;}if(draft&&e.pointerId===draft.pointer){draft.end=point(e);drawDraft();}else if(polygonDraft&&effectiveTool()==='polygon'){polygonDraft.cursor=point(e);drawPolygonDraft();}});
+  ui.overlay.addEventListener('pointermove',e=>{updateCrosshair(e);if(editDraft){moveEdit(e);return;}if(panDraft&&e.pointerId===panDraft.pointer){ui.drop.scrollLeft=panDraft.left+panDraft.x-e.clientX;ui.drop.scrollTop=panDraft.top+panDraft.y-e.clientY;return;}if(draft&&e.pointerId===draft.pointer){draft.end=point(e);drawDraft();}else if(polygonDraft&&effectiveTool()==='polygon'){polygonDraft.cursor=point(e);drawPolygonDraft();}});
   ui.overlay.addEventListener('pointerup',e=>{if(editDraft&&e.pointerId===editDraft.pointer){editDraft=null;return;}if(panDraft&&e.pointerId===panDraft.pointer){panDraft=null;ui.overlay.classList.remove('panning');return;}if(!draft||e.pointerId!==draft.pointer)return;const {start,imageId,type}=draft,end=point(e);cancelDraft();const image=active();if(!image||image.id!==imageId)return;
     if(type==='line'){
       const r=ui.overlay.getBoundingClientRect(),distance=Math.hypot((end.x-start.x)*r.width/image.width,(end.y-start.y)*r.height/image.height);
@@ -181,7 +184,8 @@
     const raw={x:Math.min(start.x,end.x),y:Math.min(start.y,end.y),width:Math.abs(end.x-start.x),height:Math.abs(end.y-start.y)};
     if(raw.width<Math.max(3,image.width*.003)||raw.height<Math.max(3,image.height*.003)){status('Box too small. Drag a larger rectangle.');return;}
     requestLabel('box',rounded(raw));});
-  ui.overlay.addEventListener('pointercancel',()=>cancelDraft());
+  ui.overlay.addEventListener('pointerleave',()=>{hideCrosshair();lastPointer=null;});
+  ui.overlay.addEventListener('pointercancel',()=>{hideCrosshair();lastPointer=null;cancelDraft();});
   ui['cancel-label'].addEventListener('click',()=>ui['label-dialog'].close('cancel'));
   ui['label-form'].addEventListener('submit',e=>{e.preventDefault();if(!ui['new-label'].value.trim()){ui['new-label'].setCustomValidity('Enter a class name.');ui['new-label'].reportValidity();return;}ui['label-dialog'].close('save');});
   ui['new-label'].addEventListener('input',()=>ui['new-label'].setCustomValidity(''));
@@ -212,7 +216,7 @@
     if(key==='q'||key==='e'||key==='f'){if(!active())return;e.preventDefault();ui[key==='q'?'zoom-in':key==='e'?'zoom-out':'zoom-fit'].click();}
   });
   document.addEventListener('keyup',e=>{if(e.code==='Space')releaseTemporaryPan();});
-  window.addEventListener('blur',releaseTemporaryPan);
+  window.addEventListener('blur',()=>{hideCrosshair();lastPointer=null;releaseTemporaryPan();});
   function download(name,content,type){const blob=new Blob([content],{type}),href=URL.createObjectURL(blob),link=document.createElement('a');link.href=href;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(href),60000);}
   const stem=image=>image.filename.replace(/\.[^.]+$/,'')||'annotations';
   const exported=image=>({filename:image.filename,width:image.width,height:image.height,annotations:image.annotations.map(b=>({...b}))});
