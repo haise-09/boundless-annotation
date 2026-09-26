@@ -1,0 +1,9 @@
+/* Center a transparent header copy of the supplied artwork within the original header height. */
+header{padding-top:18px;padding-bottom:18px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand-logo{display:block;width:60px;height:60px;object-fit:contain;flex:none}
+.brand-copy{min-width:0}
+/* The visual guide replaces the desktop pointer; pan keeps its hand even over shapes. */
+#overlay:not(.pan-mode),#overlay:not(.pan-mode) *{cursor:none!important}
+#overlay.pan-mode,#overlay.pan-mode *{cursor:grab!important}
+#overlay.pan-mode.panning,#overlay.pan-mode.panning *{cursor:grabbing!important}
