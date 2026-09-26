@@ -1,5 +1,16 @@
 # Boundless
 
+**Version 1.0** · A quick, browser-only image annotation tool.
+
+## Version 1.0 features
+
+- Annotate multiple images with boxes, lines, points, and polygons; edit shapes using zoom, pan, and selection handles.
+- Reuse the last label and add descriptions to annotations.
+- Export the complete dataset or current image as JSON, the current image as YOLO, or all images as a YOLO ZIP.
+- Keep images and annotations local to this open browser page; export before closing or refreshing.
+
+Project save and reopen is planned for a later version.
+
 A small, static browser app for manually drawing labeled bounding boxes on multiple images. Images stay in your browser. No account, backend, database, AI, or build process is used.
 
 ## Use
@@ -12,7 +23,7 @@ Images and annotations live only in the current page's memory and disappear on r
 
 ## JSON export
 
-**Export Dataset JSON** downloads `boundless-dataset.json` with an `images` array. Each image has `filename`, original `width` and `height`, and its own `annotations` array. Every annotation has integer `id`, string `type`, and string `label`, and optional text `description`. A `box` has `x`, `y`, `width`, `height`; a `line` has `x1`, `y1`, `x2`, `y2`; a `point` has `x`, `y`; a `polygon` has `points: [{x, y}, ...]`. Coordinates are integer pixels relative to the **original image resolution**, with origin at top left. Entries stay distinct even if filenames repeat; their array positions correspond to the image list.
+**Export Dataset JSON** downloads `boundless-dataset.json` with an `images` array. Each image has `filename`, original `width` and `height`, and its own `annotations` array. Every annotation has integer `id`, string `type`, and string `label`, and a string `description` (empty when omitted). A `box` has `x`, `y`, `width`, `height`; a `line` has `x1`, `y1`, `x2`, `y2`; a `point` has `x`, `y`; a `polygon` has `points: [{x, y}, ...]`. Coordinates are integer pixels relative to the **original image resolution**, with origin at top left. Entries stay distinct even if filenames repeat; their array positions correspond to the image list.
 
 **Export Current JSON** downloads the selected image's metadata and annotations in the earlier single-image format. Its filename gets a unique image suffix so duplicate original filenames do not overwrite the downloads.
 
