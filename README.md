@@ -1,6 +1,11 @@
 # Boundless
 
-**Version 1.2.0** · A quick, browser-only image annotation tool.
+**Version 1.2.1** · A quick, browser-only image annotation tool.
+
+## Version 1.2.1 additions
+
+- Add the Boundless coffee and bounding-box icon beside the name with a transparent header background; use the same artwork with its dark background for browser tab and home screen icons.
+- Hide the system pointer over the image while using Select, Box, Line, Point, or Polygon so the visual crosshair has a single center point. Pan keeps its grab/grabbing hand cursor.
 
 ## Version 1.2.0 addition
 
