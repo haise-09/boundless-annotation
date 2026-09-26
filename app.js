@@ -14,7 +14,7 @@
   function lineLayer(image){const svg=document.createElementNS(svgNS,'svg');svg.classList.add('annotation-line-layer');svg.setAttribute('viewBox',`0 0 ${image.width} ${image.height}`);svg.setAttribute('preserveAspectRatio','none');return svg;}
   function lineElement(b,selected=false){const line=document.createElementNS(svgNS,'line');line.classList.add('annotation-line');if(selected)line.classList.add('selected');for(const key of ['x1','y1','x2','y2'])line.setAttribute(key,b[key]);return line;}
   const coords=b=>b.type==='polygon'?`${b.points.length} vertices: ${b.points.map(p=>`(${p.x}, ${p.y})`).join(' ')}`:b.type==='line'?`(${b.x1}, ${b.y1}) → (${b.x2}, ${b.y2})`:b.type==='point'?`x: ${b.x}  y: ${b.y}`:`x: ${b.x}  y: ${b.y}  w: ${b.width}  h: ${b.height}`;
-  function chooseTool(next){closeDrawing();tool=next;for(const name of ['select','pan','box','line','point','polygon'])ui[`tool-${name}`].setAttribute('aria-pressed',String(tool===name));ui.overlay.classList.toggle('select-mode',tool==='select');ui.overlay.classList.toggle('pan-mode',tool==='pan');status({select:'Select a shape to move it. Drag its handles to edit it.',pan:'Pan: drag the image to move around. Use +, −, or Fit to zoom.',box:'Box: drag on the image to draw. Esc cancels a drawing.',line:'Line: drag from start to end. Esc cancels a drawing.',point:'Point: click on the image to mark a location.',polygon:'Polygon: click three or more vertices, then Finish polygon or press Enter. Esc cancels.'}[tool]);}
+  function chooseTool(next){closeDrawing();tool=next;for(const name of ['select','pan','box','line','point','polygon'])ui[`tool-${name}`].setAttribute('aria-pressed',String(tool===name));ui.overlay.classList.toggle('select-mode',tool==='select');ui.overlay.classList.toggle('pan-mode',tool==='pan');status({select:'Select a shape to move it. Drag its handles to edit it.',pan:'Pan: drag the image to move around. Use +, −, or Fit to zoom.',box:'Box: drag on the image to draw. Esc cancels a drawing.',line:'Line: drag from start to end. Esc cancels a drawing.',point:'Point: click on the image to mark a location.',polygon:'Polygon: click three or more vertices, then click the first vertex, Finish polygon, or press Enter. Esc cancels.'}[tool]);}
   for(const name of ['select','pan','box','line','point','polygon'])ui[`tool-${name}`].addEventListener('click',()=>chooseTool(name));
   function fitWidth(image){return Math.min(image.width,ui.drop.clientWidth-2,Math.max(100,window.innerHeight*.7)*image.width/image.height);}
   function updateZoom(){const image=active();ui['zoom-level'].textContent=image?`${Math.round((image.zoom||1)*100)}%`:'100%';for(const id of ['zoom-in','zoom-out','zoom-fit'])ui[id].disabled=!image;if(image){ui['image-wrap'].style.width=`${fitWidth(image)*(image.zoom||1)}px`;}}
@@ -132,15 +132,17 @@
     const group=document.createElementNS(svgNS,'g');group.classList.add('polygon-draft');
     const points=[...polygonDraft.points,polygonDraft.cursor].filter(Boolean);
     if(points.length>1){const preview=document.createElementNS(svgNS,'polyline');preview.classList.add('polygon-preview');preview.setAttribute('points',points.map(p=>`${p.x},${p.y}`).join(' '));group.append(preview);}
-    for(const p of polygonDraft.points){const vertex=document.createElementNS(svgNS,'circle');vertex.classList.add('polygon-vertex');vertex.setAttribute('cx',p.x);vertex.setAttribute('cy',p.y);vertex.setAttribute('r',5);group.append(vertex);}
+    for(const [index,p] of polygonDraft.points.entries()){const vertex=document.createElementNS(svgNS,'circle');vertex.classList.add('polygon-vertex');if(index===0&&polygonDraft.points.length>=3){vertex.classList.add('start-vertex');if(polygonDraft.cursor&&nearPolygonStart(polygonDraft.cursor))vertex.classList.add('near-start');}vertex.setAttribute('cx',p.x);vertex.setAttribute('cy',p.y);vertex.setAttribute('r',index===0&&polygonDraft.points.length>=3?Math.max(6,8*active().width/ui.overlay.getBoundingClientRect().width):5);group.append(vertex);}
     svg.append(group);ui['finish-polygon'].disabled=polygonDraft.points.length<3;
   }
+  function nearPolygonStart(p){if(!polygonDraft?.points.length)return false;const image=active(),r=ui.overlay.getBoundingClientRect(),first=polygonDraft.points[0];return Math.hypot((p.x-first.x)*r.width/image.width,(p.y-first.y)*r.height/image.height)<=12;}
   function addPolygonVertex(p){const image=active();if(!image)return;
     if(!polygonDraft)polygonDraft={imageId:activeId,points:[],cursor:null};
+    if(polygonDraft.points.length>=3&&nearPolygonStart(p)){finishPolygon();return;}
     const r=ui.overlay.getBoundingClientRect(),last=polygonDraft.points.at(-1);
     if(last&&Math.hypot((p.x-last.x)*r.width/image.width,(p.y-last.y)*r.height/image.height)<5)return;
     polygonDraft.points.push({x:Math.round(p.x),y:Math.round(p.y)});polygonDraft.cursor=null;drawPolygonDraft();
-    status(`${polygonDraft.points.length} polygon ${polygonDraft.points.length===1?'vertex':'vertices'}. Add at least 3, then Finish polygon or press Enter.`);
+    status(`${polygonDraft.points.length} polygon ${polygonDraft.points.length===1?'vertex':'vertices'}. Add at least 3, then click the first vertex, Finish polygon, or press Enter.`);
   }
   function finishPolygon(){if(!polygonDraft||polygonDraft.points.length<3||polygonDraft.imageId!==activeId)return;
     const image=active(),points=polygonDraft.points;
