@@ -1,0 +1,16 @@
+.export-menu{position:relative;flex:none}
+.export-menu summary{cursor:pointer;list-style:none}
+.export-menu summary::-webkit-details-marker{display:none}
+.export-trigger{min-height:39px}
+.export-trigger[aria-disabled="true"]{opacity:.42;cursor:not-allowed}
+.export-popover{position:absolute;z-index:30;top:calc(100% + 7px);left:0;width:240px;padding:6px;background:#172337;border:1px solid #49617c;border-radius:10px;box-shadow:0 16px 36px #000b}
+.export-popover hr{border:0;border-top:1px solid #3e5069;margin:6px 3px}
+.export-group{position:relative}
+.export-group>summary,.export-option{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:9px 11px;background:transparent;border:0;border-radius:6px;color:#e7edf7;text-align:left;font-size:13px;font-weight:600}
+.export-group>summary:hover,.export-group>summary:focus-visible,.export-option:hover,.export-option:focus-visible,.export-group[open]>summary{background:#293b55}
+.export-group small,.export-option small{display:block;color:#a4b6cd;font-size:11px;font-weight:400;margin-top:3px}
+.export-group>summary span{font-size:18px;color:#a4b6cd}
+.export-submenu{position:absolute;top:0;left:100%;width:184px;padding:6px;background:#172337;border:1px solid #49617c;border-radius:9px;box-shadow:0 16px 36px #000b}
+.export-submenu button{display:block;width:100%;text-align:left;padding:9px 10px;background:transparent;border:0}
+.export-submenu button:hover,.export-submenu button:focus-visible{background:#293b55}
+@media(max-width:740px){.export-popover{width:min(300px,calc(100vw - 40px));max-height:min(65vh,520px);overflow:auto}.export-submenu{position:static;width:100%;margin:2px 0 6px;box-shadow:none;background:#111d2d}.export-group>summary span{transform:rotate(90deg)}}

@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const $=id=>document.getElementById(id);
-  const ui=Object.fromEntries(['file','json','json-current','yolo','yolo-all','undo','clear','reset','drop','empty','image-wrap','image','overlay','crosshair','crosshair-coordinates','meta','status','classes','class-count','annotations','count','label-input','description-input','rename','delete','label-dialog','label-form','cancel-label','new-label','new-description','image-count','image-list','previous','next','position','tool-select','tool-pan','tool-box','tool-line','tool-point','tool-polygon','finish-polygon','zoom-in','zoom-out','zoom-fit','zoom-level'].map(id=>[id,$(id)]));
+  const ui=Object.fromEntries(['file','export-menu','json','json-current','yolo','yolo-all','voc-current','voc-all','coco','vgg','csv','undo','clear','reset','drop','empty','image-wrap','image','overlay','crosshair','crosshair-coordinates','meta','status','classes','class-count','annotations','count','label-input','description-input','rename','delete','label-dialog','label-form','cancel-label','new-label','new-description','image-count','image-list','previous','next','position','tool-select','tool-pan','tool-box','tool-line','tool-point','tool-polygon','finish-polygon','zoom-in','zoom-out','zoom-fit','zoom-level'].map(id=>[id,$(id)]));
   const project={images:[]};
   let activeId=null,draft=null,polygonDraft=null,pending=null,editDraft=null,panDraft=null,lastLabel='',session=0,tool='box',spacePan=false,lastPointer=null;
   const active=()=>project.images.find(item=>item.id===activeId)||null;
@@ -47,8 +47,12 @@
     ui.previous.disabled=index<=0;ui.next.disabled=index<0||index>=project.images.length-1;
     ui.count.textContent=`${annotations.length} ${annotations.length===1?'annotation':'annotations'}`;
     ui['image-count'].textContent=`${project.images.length} ${project.images.length===1?'image':'images'}`;
-    ui.json.disabled=ui['yolo-all'].disabled=ui.reset.disabled=!project.images.length;
-    ui['json-current'].disabled=ui.yolo.disabled=!image;
+    const hasDataset=!!project.images.length;
+    ui.json.disabled=ui['yolo-all'].disabled=ui['voc-all'].disabled=ui.coco.disabled=ui.vgg.disabled=ui.csv.disabled=ui.reset.disabled=!hasDataset;
+    ui['json-current'].disabled=ui.yolo.disabled=ui['voc-current'].disabled=!image;
+    ui['export-menu'].querySelector('.export-trigger').setAttribute('aria-disabled',String(!hasDataset));
+    ui['export-menu'].querySelector('.export-trigger').tabIndex=hasDataset?0:-1;
+    if(!hasDataset)ui['export-menu'].open=false;
     ui.clear.disabled=ui.undo.disabled=!annotations.length;
     ui['image-list'].replaceChildren();
     if(!project.images.length)ui['image-list'].textContent='Add images to start a dataset.';
@@ -115,7 +119,7 @@
   function probeFile(file){return new Promise(resolve=>{
     const url=URL.createObjectURL(file),probe=new Image();
     probe.onload=()=>{if(!probe.naturalWidth||!probe.naturalHeight){URL.revokeObjectURL(url);resolve(null);return;}
-      resolve({id:crypto.randomUUID(),filename:file.name,width:probe.naturalWidth,height:probe.naturalHeight,url,annotations:[],selected:null,nextId:1});};
+      resolve({id:crypto.randomUUID(),filename:file.name,size:file.size,width:probe.naturalWidth,height:probe.naturalHeight,url,annotations:[],selected:null,nextId:1});};
     probe.onerror=()=>{URL.revokeObjectURL(url);resolve(null);};probe.src=url;
   });}
   const supportedImage=file=>['image/jpeg','image/png','image/webp','image/avif','image/bmp','image/x-ms-bmp'].includes(file.type)||(!file.type&&/\.(?:jpe?g|png|webp|avif|bmp)$/i.test(file.name));
@@ -203,7 +207,7 @@
   const typingTarget=element=>!!element?.closest?.('input, textarea, select, [contenteditable="true"], [role="textbox"]');
   function releaseTemporaryPan(){if(!spacePan)return;spacePan=false;if(panDraft){try{ui.overlay.releasePointerCapture(panDraft.pointer);}catch{}panDraft=null;ui.overlay.classList.remove('panning');}showTool();}
   document.addEventListener('keydown',e=>{
-    if(e.isComposing||ui['label-dialog'].open||typingTarget(e.target))return;
+    if(e.isComposing||ui['label-dialog'].open||typingTarget(e.target)||e.target.closest?.('#export-menu'))return;
     const key=e.key.toLowerCase();
     if((e.ctrlKey||e.metaKey)&&!e.altKey&&key==='z'){e.preventDefault();ui.undo.click();return;}
     if(e.ctrlKey||e.metaKey||e.altKey)return;
@@ -217,6 +221,19 @@
   });
   document.addEventListener('keyup',e=>{if(e.code==='Space')releaseTemporaryPan();});
   window.addEventListener('blur',()=>{hideCrosshair();lastPointer=null;releaseTemporaryPan();});
+  const exportGroups=[...ui['export-menu'].querySelectorAll('.export-group')];
+  const exportTrigger=ui['export-menu'].querySelector('.export-trigger');
+  function closeExportMenu(){if(ui['export-menu'].contains(document.activeElement)&&document.activeElement!==exportTrigger)exportTrigger.focus();ui['export-menu'].open=false;exportGroups.forEach(group=>group.open=false);}
+  exportTrigger.addEventListener('click',e=>{if(!project.images.length)e.preventDefault();});
+  ui['export-menu'].addEventListener('toggle',e=>{if(e.target===ui['export-menu']&&!e.target.open)exportGroups.forEach(group=>group.open=false);},true);
+  exportGroups.forEach(group=>{
+    group.addEventListener('toggle',()=>{if(group.open)exportGroups.forEach(other=>{if(other!==group)other.open=false;});});
+    group.addEventListener('mouseenter',()=>{if(window.matchMedia('(hover:hover) and (min-width:741px)').matches)group.open=true;});
+    group.addEventListener('mouseleave',()=>{if(window.matchMedia('(hover:hover) and (min-width:741px)').matches)group.open=false;});
+  });
+  ui['export-menu'].addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeExportMenu();}});
+  document.addEventListener('pointerdown',e=>{if(!ui['export-menu'].contains(e.target))closeExportMenu();});
+  ui['export-menu'].querySelectorAll('.export-popover button').forEach(button=>button.addEventListener('click',closeExportMenu));
   function download(name,content,type){const blob=new Blob([content],{type}),href=URL.createObjectURL(blob),link=document.createElement('a');link.href=href;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(href),60000);}
   const stem=image=>image.filename.replace(/\.[^.]+$/,'')||'annotations';
   const exported=image=>({filename:image.filename,width:image.width,height:image.height,annotations:image.annotations.map(b=>({...b}))});
@@ -224,7 +241,7 @@
   ui['json-current'].addEventListener('click',()=>{const image=active();if(!image)return;download(`${stem(image)}-${image.id.slice(0,8)}.json`,JSON.stringify({image:{filename:image.filename,width:image.width,height:image.height},annotations:image.annotations.map(b=>({...b}))},null,2)+'\n','application/json');});
   ui.yolo.addEventListener('click',()=>{const image=active();if(!image)return;const rectangles=image.annotations.filter(b=>(b.type||'box')==='box'),classes=[...new Set(rectangles.map(b=>b.label))];
     const lines=rectangles.map(b=>[classes.indexOf(b.label),(b.x+b.width/2)/image.width,(b.y+b.height/2)/image.height,b.width/image.width,b.height/image.height].map((n,i)=>i?clamp(n,0,1).toFixed(6):n).join(' '));
-    const name=`${stem(image)}-${image.id.slice(0,8)}`;download(`${name}.txt`,lines.join('\n')+(lines.length?'\n':''),'text/plain');download(`${name}-classes.txt`,classes.join('\n')+(classes.length?'\n':''),'text/plain');});
+    const name=`${stem(image)}-${image.id.slice(0,8)}`;download(`${name}.txt`,lines.join('\n')+(lines.length?'\n':''),'text/plain');download(`${name}-classes.txt`,classes.join('\n')+(classes.length?'\n':''),'text/plain');announceExport('YOLO',rectangles.length,image.annotations.length);});
   const yoloLine=(b,image,classes)=>[classes.indexOf(b.label),(b.x+b.width/2)/image.width,(b.y+b.height/2)/image.height,b.width/image.width,b.height/image.height].map((n,i)=>i?clamp(n,0,1).toFixed(6):n).join(' ');
   function zipFiles(files){const encoder=new TextEncoder(),parts=[],directory=[];let offset=0;const table=Array.from({length:256},(_,i)=>{let c=i;for(let j=0;j<8;j++)c=c&1?0xedb88320^(c>>>1):c>>>1;return c>>>0;});
     const crc32=data=>{let c=0xffffffff;for(const byte of data)c=table[(c^byte)&255]^(c>>>8);return(c^0xffffffff)>>>0;};
@@ -234,7 +251,72 @@
   }
   ui['yolo-all'].addEventListener('click',()=>{if(!project.images.length)return;const classes=[...new Set(project.images.flatMap(image=>image.annotations.filter(b=>(b.type||'box')==='box').map(b=>b.label)))];const manifest=[];
     const files=project.images.map((image,index)=>{const name=`${String(index+1).padStart(3,'0')}-${stem(image).replace(/[^a-z0-9_-]/gi,'_').slice(0,60)||'image'}.txt`;manifest.push({annotation_file:name,image_filename:image.filename,width:image.width,height:image.height});const lines=image.annotations.filter(b=>(b.type||'box')==='box').map(b=>yoloLine(b,image,classes));return[name,lines.join('\n')+(lines.length?'\n':'')];});
-    files.push(['classes.txt',classes.join('\n')+(classes.length?'\n':'')],['image-map.json',JSON.stringify({images:manifest},null,2)+'\n']);download('boundless-yolo.zip',zipFiles(files),'application/zip');status(`Exported ${project.images.length} image annotation files with shared class IDs.`);
+    files.push(['classes.txt',classes.join('\n')+(classes.length?'\n':'')],['image-map.json',JSON.stringify({images:manifest},null,2)+'\n']);download('boundless-yolo.zip',zipFiles(files),'application/zip');announceExport('YOLO ZIP',project.images.flatMap(item=>item.annotations).filter(b=>(b.type||'box')==='box').length,project.images.reduce((sum,item)=>sum+item.annotations.length,0));
   });
+  function announceExport(format,included,total){const skipped=total-included;status(`Exported ${format}: ${included} ${included===1?'annotation':'annotations'}${skipped?`; skipped ${skipped} unsupported ${skipped===1?'shape':'shapes'}`:''}.`);}
+  const xmlText=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[char]));
+  const imageExportName=image=>project.images.filter(item=>item.filename===image.filename).length>1?`${stem(image)}-${image.id.slice(0,8)}${image.filename.slice(stem(image).length)}`:image.filename;
+  function vocXml(image){
+    const objects=image.annotations.filter(b=>(b.type||'box')==='box').map(b=>{
+      const xmin=clamp(Math.round(b.x)+1,1,image.width),ymin=clamp(Math.round(b.y)+1,1,image.height);
+      const xmax=clamp(Math.round(b.x+b.width),xmin,image.width),ymax=clamp(Math.round(b.y+b.height),ymin,image.height);
+      return `  <object><name>${xmlText(b.label)}</name><pose>Unspecified</pose><truncated>0</truncated><difficult>0</difficult><bndbox><xmin>${xmin}</xmin><ymin>${ymin}</ymin><xmax>${xmax}</xmax><ymax>${ymax}</ymax></bndbox></object>`;
+    });
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<annotation>\n  <filename>${xmlText(imageExportName(image))}</filename>\n  <size><width>${image.width}</width><height>${image.height}</height><depth>3</depth></size>\n  <segmented>0</segmented>\n${objects.join('\n')}\n</annotation>\n`;
+  }
+  ui['voc-current'].addEventListener('click',()=>{const image=active();if(!image)return;download(`${stem(image)}-${image.id.slice(0,8)}.xml`,vocXml(image),'application/xml');announceExport('VOC XML',image.annotations.filter(b=>(b.type||'box')==='box').length,image.annotations.length);});
+  ui['voc-all'].addEventListener('click',()=>{if(!project.images.length)return;const manifest=[];
+    const files=project.images.map((image,index)=>{const name=`${String(index+1).padStart(3,'0')}-${stem(image).replace(/[^a-z0-9_-]/gi,'_').slice(0,60)||'image'}.xml`;manifest.push({annotation_file:name,image_filename:image.filename,export_image_filename:imageExportName(image),width:image.width,height:image.height});return[name,vocXml(image)];});
+    files.push(['image-map.json',JSON.stringify({images:manifest},null,2)+'\n']);download('boundless-voc.zip',zipFiles(files),'application/zip');
+    const all=project.images.flatMap(image=>image.annotations);announceExport('VOC ZIP',all.filter(b=>(b.type||'box')==='box').length,all.length);
+  });
+  function cocoDataset(){
+    const supported=project.images.flatMap(image=>image.annotations).filter(b=>['box','polygon'].includes(b.type||'box'));
+    const names=[...new Set(supported.map(b=>b.label))],categories=names.map((name,i)=>({id:i+1,name,supercategory:''}));let nextId=1;
+    const images=project.images.map((image,i)=>({id:i+1,file_name:imageExportName(image),width:image.width,height:image.height}));
+    const annotations=project.images.flatMap((image,i)=>image.annotations.flatMap(b=>{
+      const type=b.type||'box';if(type!=='box'&&type!=='polygon')return[];
+      let bbox,area,segmentation=[];
+      if(type==='box'){bbox=[b.x,b.y,b.width,b.height];area=b.width*b.height;}
+      else{
+        const xs=b.points.map(p=>p.x),ys=b.points.map(p=>p.y),xmin=Math.min(...xs),ymin=Math.min(...ys);
+        bbox=[xmin,ymin,Math.max(...xs)-xmin,Math.max(...ys)-ymin];
+        area=Math.abs(b.points.reduce((sum,p,j)=>sum+p.x*b.points[(j+1)%b.points.length].y-p.y*b.points[(j+1)%b.points.length].x,0))/2;
+        segmentation=[b.points.flatMap(p=>[p.x,p.y])];
+      }
+      return[{id:nextId++,image_id:i+1,category_id:names.indexOf(b.label)+1,bbox,area,iscrowd:0,segmentation}];
+    }));
+    return{info:{description:'Boundless export'},licenses:[],images,annotations,categories};
+  }
+  ui.coco.addEventListener('click',()=>{if(!project.images.length)return;download('boundless-coco.json',JSON.stringify(cocoDataset(),null,2)+'\n','application/json');const all=project.images.flatMap(image=>image.annotations);announceExport('COCO JSON',all.filter(b=>['box','polygon'].includes(b.type||'box')).length,all.length);});
+  function vggDataset(){
+    const data={};
+    for(const image of project.images){
+      const filename=imageExportName(image),size=image.size??0;
+      const regions=image.annotations.map(b=>{
+        const type=b.type||'box';let shape;
+        if(type==='box')shape={name:'rect',x:b.x,y:b.y,width:b.width,height:b.height};
+        else if(type==='point')shape={name:'point',cx:b.x,cy:b.y};
+        else{const points=type==='line'?[{x:b.x1,y:b.y1},{x:b.x2,y:b.y2}]:b.points;shape={name:type==='line'?'polyline':'polygon',all_points_x:points.map(p=>p.x),all_points_y:points.map(p=>p.y)};}
+        return{shape_attributes:shape,region_attributes:{label:b.label,description:b.description||''}};
+      });
+      data[`${filename}${size}`]={filename,size,regions,file_attributes:{original_filename:image.filename}};
+    }
+    return data;
+  }
+  ui.vgg.addEventListener('click',()=>{if(!project.images.length)return;download('boundless-vgg.json',JSON.stringify(vggDataset(),null,2)+'\n','application/json');status(`Exported VGG JSON with ${project.images.length} ${project.images.length===1?'image':'images'} and all annotation types.`);});
+  const csvCell=value=>{let text=String(value??'');if(/^[=+@-]/.test(text))text="'"+text;return`"${text.replace(/"/g,'""')}"`;};
+  function csvDataset(){
+    const columns=['image_index','image_filename','image_width','image_height','annotation_id','type','label','description','x','y','width','height','x1','y1','x2','y2','points_json'];
+    const rows=[columns.join(',')];
+    project.images.forEach((image,index)=>{
+      for(const b of image.annotations.length?image.annotations:[null]){
+        const type=b?.type||'box',values=[index+1,image.filename,image.width,image.height,b?.id??'',b?type:'',b?.label??'',b?.description??'',b&&(type==='box'||type==='point')?b.x:'',b&&(type==='box'||type==='point')?b.y:'',type==='box'&&b?b.width:'',type==='box'&&b?b.height:'',type==='line'&&b?b.x1:'',type==='line'&&b?b.y1:'',type==='line'&&b?b.x2:'',type==='line'&&b?b.y2:'',type==='polygon'&&b?JSON.stringify(b.points):''];
+        rows.push(values.map(csvCell).join(','));
+      }
+    });
+    return'\ufeff'+rows.join('\r\n')+'\r\n';
+  }
+  ui.csv.addEventListener('click',()=>{if(!project.images.length)return;download('boundless-annotations.csv',csvDataset(),'text/csv;charset=utf-8');status(`Exported CSV with all annotation types across ${project.images.length} ${project.images.length===1?'image':'images'}.`);});
   render();
 })();
