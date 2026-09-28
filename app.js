@@ -6,6 +6,12 @@
   let activeId=null,draft=null,polygonDraft=null,pending=null,editDraft=null,panDraft=null,lastLabel='',session=0,tool='box',spacePan=false,lastPointer=null;
   const active=()=>project.images.find(item=>item.id===activeId)||null;
   const boxes=()=>active()?.annotations||[];
+  const snapshot=image=>({annotations:structuredClone(image.annotations),selected:image.selected,nextId:image.nextId});
+  function recordUndo(image,before){
+    if(JSON.stringify(before.annotations)===JSON.stringify(image.annotations))return;
+    image.history.push(before);
+    if(image.history.length>50)image.history.shift();
+  }
   const status=message=>{ui.status.textContent=message;};
   const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
   const point=e=>{const r=ui.overlay.getBoundingClientRect(),image=active();return {x:clamp((e.clientX-r.left)*image.width/r.width,0,image.width),y:clamp((e.clientY-r.top)*image.height/r.height,0,image.height)};};
@@ -28,7 +34,7 @@
   new ResizeObserver(updateZoom).observe(ui.drop);
   function bindShape(element,image,b){element.addEventListener('pointerdown',e=>{if(tool!=='select'||e.button!==0)return;e.preventDefault();e.stopPropagation();if(image.selected!==b.id){image.selected=b.id;render();}startEdit(e,image,b,'move');});element.addEventListener('click',e=>{if(effectiveTool()==='select')e.stopPropagation();});}
   function addVertex(svg,image,b,part,x,y){const handle=document.createElementNS(svgNS,'circle');handle.classList.add('edit-vertex');handle.setAttribute('cx',x);handle.setAttribute('cy',y);handle.setAttribute('r',Math.max(6,9*image.width/ui.overlay.clientWidth));handle.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();startEdit(e,image,b,part);});svg.append(handle);}
-  function startEdit(e,image,b,part){editDraft={pointer:e.pointerId,imageId:image.id,annotation:b,original:structuredClone(b),part,start:point(e)};ui.overlay.setPointerCapture(e.pointerId);}
+  function startEdit(e,image,b,part){editDraft={pointer:e.pointerId,imageId:image.id,annotation:b,original:structuredClone(b),before:snapshot(image),part,start:point(e)};ui.overlay.setPointerCapture(e.pointerId);}
   function moveEdit(e){const edit=editDraft,image=active();if(!edit||e.pointerId!==edit.pointer||image?.id!==edit.imageId)return;const p=point(e),b=edit.annotation,o=edit.original,dx=Math.round(p.x-edit.start.x),dy=Math.round(p.y-edit.start.y),part=edit.part;
     if(part==='move'){if((b.type||'box')==='box'){b.x=clamp(o.x+dx,0,image.width-o.width);b.y=clamp(o.y+dy,0,image.height-o.height);}else if(b.type==='point'){b.x=clamp(o.x+dx,0,image.width);b.y=clamp(o.y+dy,0,image.height);}else{const vertices=b.type==='line'?[{x:o.x1,y:o.y1},{x:o.x2,y:o.y2}]:o.points;const minX=Math.min(...vertices.map(v=>v.x)),maxX=Math.max(...vertices.map(v=>v.x)),minY=Math.min(...vertices.map(v=>v.y)),maxY=Math.max(...vertices.map(v=>v.y));const shiftX=clamp(dx,-minX,image.width-maxX),shiftY=clamp(dy,-minY,image.height-maxY);if(b.type==='line'){b.x1=o.x1+shiftX;b.x2=o.x2+shiftX;b.y1=o.y1+shiftY;b.y2=o.y2+shiftY;}else b.points=o.points.map(v=>({x:v.x+shiftX,y:v.y+shiftY}));}}
     else if(b.type==='box'){const right=o.x+o.width,bottom=o.y+o.height;const left=part.includes('w')?clamp(Math.round(p.x),0,right-1):o.x,top=part.includes('n')?clamp(Math.round(p.y),0,bottom-1):o.y;b.x=left;b.y=top;b.width=(part.includes('e')?clamp(Math.round(p.x),o.x+1,image.width):right)-left;b.height=(part.includes('s')?clamp(Math.round(p.y),o.y+1,image.height):bottom)-top;}
@@ -53,7 +59,7 @@
     ui['export-menu'].querySelector('.export-trigger').setAttribute('aria-disabled',String(!hasDataset));
     ui['export-menu'].querySelector('.export-trigger').tabIndex=hasDataset?0:-1;
     if(!hasDataset)ui['export-menu'].open=false;
-    ui.clear.disabled=ui.undo.disabled=!annotations.length;
+    ui.clear.disabled=!annotations.length;ui.undo.disabled=!image?.history.length;
     ui['image-list'].replaceChildren();
     if(!project.images.length)ui['image-list'].textContent='Add images to start a dataset.';
     for(const item of project.images){
@@ -119,7 +125,7 @@
   function probeFile(file){return new Promise(resolve=>{
     const url=URL.createObjectURL(file),probe=new Image();
     probe.onload=()=>{if(!probe.naturalWidth||!probe.naturalHeight){URL.revokeObjectURL(url);resolve(null);return;}
-      resolve({id:crypto.randomUUID(),filename:file.name,size:file.size,width:probe.naturalWidth,height:probe.naturalHeight,url,annotations:[],selected:null,nextId:1});};
+      resolve({id:crypto.randomUUID(),filename:file.name,size:file.size,width:probe.naturalWidth,height:probe.naturalHeight,url,annotations:[],selected:null,nextId:1,history:[]});};
     probe.onerror=()=>{URL.revokeObjectURL(url);resolve(null);};probe.src=url;
   });}
   const supportedImage=file=>['image/jpeg','image/png','image/webp','image/avif','image/bmp','image/x-ms-bmp'].includes(file.type)||(!file.type&&/\.(?:jpe?g|png|webp|avif|bmp)$/i.test(file.name));
@@ -179,7 +185,7 @@
     if(effectiveTool()==='point'){requestLabel('point',{x:Math.round(start.x),y:Math.round(start.y)});return;}
     draft={pointer:e.pointerId,start,end:start,imageId:activeId,type:effectiveTool()};ui.overlay.setPointerCapture(e.pointerId);drawDraft();});
   ui.overlay.addEventListener('pointermove',e=>{updateCrosshair(e);if(editDraft){moveEdit(e);return;}if(panDraft&&e.pointerId===panDraft.pointer){ui.drop.scrollLeft=panDraft.left+panDraft.x-e.clientX;ui.drop.scrollTop=panDraft.top+panDraft.y-e.clientY;return;}if(draft&&e.pointerId===draft.pointer){draft.end=point(e);drawDraft();}else if(polygonDraft&&effectiveTool()==='polygon'){polygonDraft.cursor=point(e);drawPolygonDraft();}});
-  ui.overlay.addEventListener('pointerup',e=>{if(editDraft&&e.pointerId===editDraft.pointer){editDraft=null;return;}if(panDraft&&e.pointerId===panDraft.pointer){panDraft=null;ui.overlay.classList.remove('panning');return;}if(!draft||e.pointerId!==draft.pointer)return;const {start,imageId,type}=draft,end=point(e);cancelDraft();const image=active();if(!image||image.id!==imageId)return;
+  ui.overlay.addEventListener('pointerup',e=>{if(editDraft&&e.pointerId===editDraft.pointer){const edit=editDraft;editDraft=null;const image=active();if(image?.id===edit.imageId){recordUndo(image,edit.before);render();}return;}if(panDraft&&e.pointerId===panDraft.pointer){panDraft=null;ui.overlay.classList.remove('panning');return;}if(!draft||e.pointerId!==draft.pointer)return;const {start,imageId,type}=draft,end=point(e);cancelDraft();const image=active();if(!image||image.id!==imageId)return;
     if(type==='line'){
       const r=ui.overlay.getBoundingClientRect(),distance=Math.hypot((end.x-start.x)*r.width/image.width,(end.y-start.y)*r.height/image.height);
       if(distance<5){status('Line too short. Drag at least a few pixels.');return;}
@@ -195,13 +201,13 @@
   ui['new-label'].addEventListener('input',()=>ui['new-label'].setCustomValidity(''));
   ui['new-label'].addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();ui['label-form'].requestSubmit();}});
   ui['label-dialog'].addEventListener('close',()=>{const label=ui['new-label'].value.trim(),image=active();
-    if(ui['label-dialog'].returnValue==='save'&&label&&pending&&image?.id===pending.imageId){const b={id:image.nextId++,type:pending.type,label,description:ui['new-description'].value.trim(),...pending.shape};lastLabel=label;image.annotations.push(b);image.selected=b.id;render();status(`Added “${label}”.`);}pending=null;});
-  ui.rename.addEventListener('click',()=>{const b=boxes().find(b=>b.id===active()?.selected),label=ui['label-input'].value.trim();if(!b||!label){status('Enter a class name.');return;}b.label=label;b.description=ui['description-input'].value.trim();lastLabel=label;render();status('Annotation saved.');});
+    if(ui['label-dialog'].returnValue==='save'&&label&&pending&&image?.id===pending.imageId){const before=snapshot(image),b={id:image.nextId++,type:pending.type,label,description:ui['new-description'].value.trim(),...pending.shape};lastLabel=label;image.annotations.push(b);image.selected=b.id;recordUndo(image,before);render();status(`Added “${label}”.`);}pending=null;});
+  ui.rename.addEventListener('click',()=>{const image=active(),b=boxes().find(b=>b.id===image?.selected),label=ui['label-input'].value.trim();if(!b||!label){status('Enter a class name.');return;}const before=snapshot(image);b.label=label;b.description=ui['description-input'].value.trim();lastLabel=label;recordUndo(image,before);render();status('Annotation saved.');});
   ui['label-input'].addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();ui.rename.click();}});
-  function removeSelected(){const image=active(),index=boxes().findIndex(b=>b.id===image?.selected);if(index<0)return;image.annotations.splice(index,1);image.selected=null;render();status('Annotation deleted.');}
+  function removeSelected(){const image=active(),index=boxes().findIndex(b=>b.id===image?.selected);if(index<0)return;const before=snapshot(image);image.annotations.splice(index,1);image.selected=null;recordUndo(image,before);render();status('Annotation deleted.');}
   ui.delete.addEventListener('click',removeSelected);
-  ui.undo.addEventListener('click',()=>{const image=active();if(!image?.annotations.length)return;image.annotations.pop();image.selected=null;render();status('Last annotation removed.');});
-  ui.clear.addEventListener('click',()=>{const image=active();if(!image?.annotations.length)return;if(!confirm('Clear all annotations for this image?'))return;image.annotations=[];image.selected=null;render();status('Annotations cleared for this image.');});
+  ui.undo.addEventListener('click',()=>{const image=active();if(!image?.history.length)return;cancelDraft();const before=image.history.pop();image.annotations=before.annotations;image.selected=before.selected;image.nextId=before.nextId;render();status('Last change undone.');});
+  ui.clear.addEventListener('click',()=>{const image=active();if(!image?.annotations.length)return;if(!confirm('Clear all annotations for this image?'))return;const before=snapshot(image);image.annotations=[];image.selected=null;recordUndo(image,before);render();status('Annotations cleared for this image.');});
   ui.reset.addEventListener('click',()=>{if(project.images.some(item=>item.annotations.length)&&!confirm('Clear the entire dataset and all its annotations?'))return;
     closeDrawing();session++;for(const item of project.images)URL.revokeObjectURL(item.url);project.images=[];activeId=null;render();status('Dataset cleared.');});
   const typingTarget=element=>!!element?.closest?.('input, textarea, select, [contenteditable="true"], [role="textbox"]');
