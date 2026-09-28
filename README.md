@@ -1,6 +1,10 @@
 # Boundless
 
-**Version 1.3.0** · A quick, browser-only image annotation tool.
+**Version 1.3.1** · A quick, browser-only image annotation tool.
+
+## Version 1.3.1 fix
+
+- Undo now reverses completed annotation edits: adding, deleting, moving, resizing, changing labels or descriptions, and clearing the active image’s annotations. A whole drag is one undo step. Each image has its own history of up to 50 changes, held only in page memory.
 
 ## Version 1.3.0 additions
 
@@ -38,7 +42,7 @@ A small, static browser app for manually drawing labeled bounding boxes on multi
 
 Open `index.html` locally or deploy this folder to Netlify with publish directory `.` and no build command. Choose or drop one or several JPG, PNG, WebP, AVIF, or BMP images. AVIF and BMP still require support from your browser's image decoder; unsupported files are rejected locally. Use **Add Images** to add more at any time. Click a thumbnail or use Previous / Next to switch images. Each image owns its annotations, selection, and label IDs, even when filenames match. The × beside a thumbnail removes just that image, asking for confirmation if it contains annotations. **Clear annotations** clears only the active image; **Clear dataset** removes all images (with confirmation if there are annotations).
 
-Choose **Select**, **Box**, **Line**, **Point**, **Polygon**, or **Pan** in the workspace. Box and Line use click and drag, including from inside an existing annotation; Point uses a single click. With Polygon, click at least three vertices, then click its first vertex, **Finish polygon**, or press Enter; Escape discards an unfinished polygon. Type a label after completing a shape, then press Enter/Done or click **Add annotation**. The chosen tool stays active until you change it. Use Select or click an item in the list to select a shape. Drag selected shapes to move them, box corners to resize, line endpoints or polygon vertices to reposition. Zoom with +, −, and Fit, then drag with Pan to explore the image. The original coordinates stay accurate at any zoom. Move the pointer over the image to see a crosshair and its original-image x/y position; Pan hides the guide and shows the grab cursor. The last class label is offered for the next annotation; optionally add a description in the label dialog or selected annotation controls. Save changes to update both label and description. Undo last applies only to the active image. Escape cancels a drawing; Delete or Backspace deletes the selected annotation when focus is outside a text field.
+Choose **Select**, **Box**, **Line**, **Point**, **Polygon**, or **Pan** in the workspace. Box and Line use click and drag, including from inside an existing annotation; Point uses a single click. With Polygon, click at least three vertices, then click its first vertex, **Finish polygon**, or press Enter; Escape discards an unfinished polygon. Type a label after completing a shape, then press Enter/Done or click **Add annotation**. The chosen tool stays active until you change it. Use Select or click an item in the list to select a shape. Drag selected shapes to move them, box corners to resize, line endpoints or polygon vertices to reposition. Zoom with +, −, and Fit, then drag with Pan to explore the image. The original coordinates stay accurate at any zoom. Move the pointer over the image to see a crosshair and its original-image x/y position; Pan hides the guide and shows the grab cursor. The last class label is offered for the next annotation; optionally add a description in the label dialog or selected annotation controls. Save changes to update both label and description. Undo reverses the last completed annotation change on the active image, including Clear Annotations; it does not undo zoom, pan, image removal, or clearing the entire dataset. A drag counts as one change when released; canceled or unchanged drags do not add an undo step. The last 50 changes for each image remain available until that image is removed or the page closes. Escape cancels a drawing; Delete or Backspace deletes the selected annotation when focus is outside a text field.
 
 
 ### Keyboard shortcuts
@@ -49,7 +53,7 @@ Choose **Select**, **Box**, **Line**, **Point**, **Polygon**, or **Pan** in the 
 | Select Pan | `H` |
 | Temporarily pan | Hold `Space`; release to return to the previous tool |
 | Zoom in, zoom out, fit image | `Q`, `E`, `F` |
-| Undo last annotation on the active image | `Ctrl+Z` (`⌘Z` on Mac) |
+| Undo the last annotation change on the active image | `Ctrl+Z` (`⌘Z` on Mac) |
 | Finish a polygon | `Enter` or click its first vertex (at least three vertices) |
 | Cancel an unfinished drawing | `Escape` |
 
