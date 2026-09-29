@@ -1,6 +1,12 @@
 # Boundless
 
-**Version 1.3.1** · A quick, browser-only image annotation tool.
+**Version 1.3.2** · A quick, browser-only image annotation tool.
+
+## Version 1.3.2 additions
+
+- Every export downloads one ZIP containing the original images and the chosen annotation format. Name the outer ZIP in the export dialog; internal filenames remain paired.
+- Number each packaged image (`001-name.png`) so duplicate source names stay distinct. `image-map.json` records original names and the packaged names.
+- Align the format notes in the Export menu and use title case for action buttons.
 
 ## Version 1.3.1 fix
 
@@ -10,7 +16,7 @@
 
 - One Export menu groups YOLO, Pascal VOC, COCO, VGG, CSV, and Boundless JSON. Open the YOLO, VOC, or Boundless JSON submenu for current-image and full-dataset choices.
 - Each format shows which shapes it supports; export status reports skipped shapes when a format cannot represent them.
-- YOLO and VOC dataset exports package one annotation file per image in a ZIP. COCO, VGG, CSV, and Boundless dataset exports download one file each.
+- YOLO and VOC dataset exports package one annotation file per image in a ZIP. At the time, COCO, VGG, CSV, and Boundless dataset exports downloaded one data file each; version 1.3.2 packages images with them.
 
 ## Version 1.2.1 additions
 
@@ -59,45 +65,33 @@ Choose **Select**, **Box**, **Line**, **Point**, **Polygon**, or **Pan** in the 
 
 Shortcuts are ignored while typing in an input, description, or dialog. Switching between Polygon and Pan preserves unfinished polygon vertices, including during temporary Space panning. Switching to other tools cancels an unfinished polygon. Starting Pan during an unfinished Box or Line drag cancels that drag.
 
-Images and annotations live only in the current page's memory and disappear on refresh. Export before leaving. Uploaded image bytes are never sent to a server or included in exports.
+Images and annotations live only in the current page's memory and disappear on refresh. Export before leaving. Uploaded image bytes are never sent to a server; ZIP exports include the original images locally.
 
 ## Export formats
 
-All exports include annotation coordinates measured in pixels against the original image resolution, except YOLO, which uses normalized coordinates. Exports contain annotation data and image names, **not image bytes**. Supply the original image files separately when importing into another tool. A menu note identifies formats that omit some annotation types; after export, the workspace status reports how many shapes were skipped.
+Choose a format in **Export**. YOLO, Pascal VOC, and Boundless JSON offer **Current Image** or **Full Dataset**; COCO, VGG, and CSV export the full dataset. Enter a name in the dialog to download one `.zip` file. Only the outer ZIP name is customized. Its original uploaded images are included byte for byte with no re-encoding, and no data leaves your browser. The dialog shows the approximate size of the images; large datasets need browser memory and the built-in ZIP writer has a 4 GB archive limit. ZIP entries are stored without compression.
 
-| Format | Shapes included | Download |
+Every ZIP contains `image-map.json` with each original filename, packaged filename, and resolution. Packaged images use ordered names such as `001-coco.jpg`, `002-coco.jpg`, even when the uploads share a filename. The chosen format's annotation files refer to the packaged image names. Coordinates remain based on the original image dimensions. The status line reports how many annotations a format skipped.
+
+| Format | Supported shapes | ZIP contents |
 | --- | --- | --- |
-| YOLO | Boxes | Current image: TXT plus classes TXT; full dataset: ZIP |
-| Pascal VOC (XML) | Boxes | Current image: XML; full dataset: ZIP |
-| COCO (JSON) | Boxes, polygons | One dataset JSON |
-| VGG (JSON) | Boxes, lines, points, polygons | One dataset JSON |
-| CSV | Boxes, lines, points, polygons | One dataset CSV |
-| Boundless JSON | Boxes, lines, points, polygons | Current image or one dataset JSON |
+| YOLO | Boxes | `images/`, matching `labels/*.txt`, root `classes.txt`, root `image-map.json` |
+| Pascal VOC | Boxes | `JPEGImages/`, matching `Annotations/*.xml`, root `image-map.json` |
+| COCO | Boxes and polygons | `images/`, `annotations/instances.json`, root `image-map.json` |
+| VGG | Boxes, lines, points, polygons | Root-level images and `via_region_data.json`, root `image-map.json` |
+| CSV | Boxes, lines, points, polygons | `images/`, `labels.csv`, root `image-map.json` |
+| Boundless JSON | Boxes, lines, points, polygons | `images/`, `boundless.json`, root `image-map.json` |
 
-Descriptions survive in Boundless JSON, VGG JSON, and CSV. Other formats omit descriptions. Duplicate original filenames remain distinct in the ZIP manifest and CSV image index; COCO, VGG, and VOC add a short internal image ID to duplicate filenames in their exported metadata so entries cannot overwrite each other. These exports do not rename your original image files on disk.
+**YOLO** lines are `class_id x_center y_center width height`, normalized to `[0, 1]` with six decimal places. IDs start at zero and correspond to the root `classes.txt`, following the first appearance of box labels. Images without boxes get an empty TXT. Lines, points, and polygons are never converted to boxes. A training tool may also need its own dataset configuration, such as `data.yaml`.
 
-### Boundless JSON
+**Pascal VOC** XML includes one `<object>` per box, with one-based inclusive `xmin`, `ymin`, `xmax`, `ymax`. Its `<filename>` matches the corresponding packaged image, including the numbered prefix. The `<depth>` value is fixed at 3; it does not inspect source channels. PNG, AVIF, and other supported originals remain in their original formats inside the historically named `JPEGImages/` directory.
 
-**Full Dataset** downloads `boundless-dataset.json` with an `images` array. Each image has `filename`, original `width` and `height`, and its own `annotations` array. Every annotation has integer `id`, string `type`, and string `label`, and a string `description` (empty when omitted). A `box` has `x`, `y`, `width`, `height`; a `line` has `x1`, `y1`, `x2`, `y2`; a `point` has `x`, `y`; a `polygon` has `points: [{x, y}, ...]`. Coordinates are integer pixels relative to the **original image resolution**, with origin at top left. Entries stay distinct even if filenames repeat; their array positions correspond to the image list.
+**COCO** has dataset `images`, `categories`, and `annotations` in one JSON; categories start at ID 1, and polygons include segmentation and area. Image `file_name` values point into `images/`. Lines and points are omitted.
 
-**Current Image** downloads the selected image's metadata and annotations in the earlier single-image format. Its filename gets a unique image suffix so duplicate original filenames do not overwrite the downloads.
+**VGG** uses VIA 2 style regions for rectangles, polylines, points, and polygons. Images and JSON share the ZIP root; `filename` references the packaged name. The original name remains in `file_attributes.original_filename`.
 
-### YOLO
+**CSV** has one row per annotation, including packaged and original image names, dimensions, type, label, description, and geometry columns. Empty images get a row without annotation fields. Polygon vertices are serialized in `points_json`. The CSV is UTF-8 with a BOM; text resembling spreadsheet formulas is escaped.
 
-**Current Image** downloads two files for the selected image: `<image-name>-<unique-id>.txt` and `<image-name>-<unique-id>-classes.txt`. **Full Dataset (.zip)** downloads `boundless-yolo.zip` with one numbered `.txt` per image, `classes.txt` with a shared dataset class map, and `image-map.json` matching each text file to its original image filename and resolution (including duplicate filenames). Images with no boxes get an empty text file. Standard YOLO bounding-box export includes **box annotations only**; lines, points, and polygons are never converted to boxes. Each box line is `class_id x_center y_center width height`, with normalized values in `[0, 1]` and six decimal places. Class IDs start at zero and follow first appearance of box labels. The current-image classes file uses IDs local to that image; all files in the ZIP use IDs from its shared `classes.txt`. Re-export both files after changing labels or boxes.
+**Boundless JSON** retains each annotation's `id`, `type`, `label`, optional `description`, and original-resolution geometry. Box geometry is `x`, `y`, `width`, `height`; line is `x1`, `y1`, `x2`, `y2`; point is `x`, `y`; polygon is `points: [{x, y}, ...]`. Full Dataset contains an `images` array. Current Image keeps the earlier `{image, annotations}` structure. `filename` refers to the packaged image; `original_filename` preserves the upload name.
 
-### Pascal VOC (XML)
-
-**Current Image** downloads one XML document. **Full Dataset (.zip)** downloads one numbered XML file per image and `image-map.json` matching each XML filename to the original image name and resolution. Each `<object>` has a label and bounding box; lines, points, and polygons are omitted. VOC uses one-based inclusive `<xmin>`, `<ymin>`, `<xmax>`, `<ymax>` coordinates. The `<depth>` value is fixed at 3 for typical RGB images; it does not inspect source channels. If a filename occurs more than once, the XML filename field uses a unique suffix, recorded alongside the original name in the ZIP manifest.
-
-### COCO (JSON)
-
-`boundless-coco.json` contains dataset `images`, `categories`, and `annotations`. It includes boxes and polygons, with box geometry, area, and polygon segmentation. Categories start at ID 1. Lines and points are omitted. For duplicate filenames, its `file_name` receives a short unique suffix; match it to the original image manually when assembling a COCO dataset.
-
-### VGG (JSON)
-
-`boundless-vgg.json` uses VIA 2 style image entries and regions: rectangles, polylines, points, and polygons. Region attributes contain `label` and `description`. Image entries retain the original name as `file_attributes.original_filename`. Duplicate filenames receive a unique suffix in their exported `filename`; actual image bytes are not included.
-
-### CSV
-
-`boundless-annotations.csv` has one row per annotation with image index, original filename and dimensions, ID, type, label, description, and coordinate columns. Polygon vertices are JSON inside the `points_json` cell. Images without annotations get one row with empty annotation fields. Open as UTF-8 CSV; text that resembles a spreadsheet formula is escaped for safer opening in spreadsheet applications.
+Descriptions are retained in VGG, CSV, and Boundless JSON; YOLO, VOC, and COCO do not represent them in these exports. The ZIP is an annotation handoff, not a reopenable Boundless project: images and edits remain in the current browser page until it closes or refreshes.
