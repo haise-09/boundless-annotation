@@ -4,8 +4,9 @@
 
 ## Version 1.3.2 additions
 
-- Every export downloads one ZIP containing the original images and the chosen annotation format. Name the outer ZIP in the export dialog; internal filenames remain paired.
-- Number each packaged image (`001-name.png`) so duplicate source names stay distinct. `image-map.json` records original names and the packaged names.
+- Every export downloads one ZIP containing the chosen annotation format and, by default, the original images. Name the outer ZIP in the export dialog; internal filenames remain paired.
+- Number each packaged image (`001-name.png`) so duplicate source names stay distinct. Optionally include `image-map.json` to record original names and packaged names (off by default).
+- The export dialog estimates the stored ZIP size and offers an image inclusion checkbox (on by default). Full-dataset exports can optionally assign images to train, val, and test splits; YOLO exports include `data.yaml`.
 - Align the format notes in the Export menu and use title case for action buttons.
 
 ## Version 1.3.1 fix
@@ -65,28 +66,32 @@ Choose **Select**, **Box**, **Line**, **Point**, **Polygon**, or **Pan** in the 
 
 Shortcuts are ignored while typing in an input, description, or dialog. Switching between Polygon and Pan preserves unfinished polygon vertices, including during temporary Space panning. Switching to other tools cancels an unfinished polygon. Starting Pan during an unfinished Box or Line drag cancels that drag.
 
-Images and annotations live only in the current page's memory and disappear on refresh. Export before leaving. Uploaded image bytes are never sent to a server; ZIP exports include the original images locally.
+Images and annotations live only in the current page's memory and disappear on refresh. Export before leaving. Uploaded image bytes are never sent to a server; ZIP exports include the original images locally by default.
 
 ## Export formats
 
-Choose a format in **Export**. YOLO, Pascal VOC, and Boundless JSON offer **Current Image** or **Full Dataset**; COCO, VGG, and CSV export the full dataset. Enter a name in the dialog to download one `.zip` file. Only the outer ZIP name is customized. Its original uploaded images are included byte for byte with no re-encoding, and no data leaves your browser. The dialog shows the approximate size of the images; large datasets need browser memory and the built-in ZIP writer has a 4 GB archive limit. ZIP entries are stored without compression.
+Choose a format in **Export**. YOLO, Pascal VOC, and Boundless JSON offer **Current Image** or **Full Dataset**; COCO, VGG, and CSV export the full dataset. Enter a name in the dialog to download one `.zip` file. Only the outer ZIP name is customized. **Include Original Images** is checked by default and adds the original uploaded files byte for byte, without re-encoding. Uncheck it for annotation-only handoff; an empty image directory remains in formats with an image directory, while names in the data still refer to their expected image paths. **Include image-map.json** is unchecked by default. The map is optional metadata listing original and packaged filenames and resolution; none of the annotation formats depend on it. The dialog estimates the ZIP size as you change options. Entries are stored without compression, so the estimate accounts for file bytes and ZIP headers, though browsers may present the downloaded size differently. Large datasets need browser memory; the ZIP writer has a 4 GB archive limit. Nothing is uploaded.
 
-Every ZIP contains `image-map.json` with each original filename, packaged filename, and resolution. Packaged images use ordered names such as `001-coco.jpg`, `002-coco.jpg`, even when the uploads share a filename. The chosen format's annotation files refer to the packaged image names. Coordinates remain based on the original image dimensions. The status line reports how many annotations a format skipped.
+**Split Dataset** is optional for full-dataset exports and off by default. The split is stable during an open browser session, and each image is assigned to exactly one group. For 1–4 images, all go to train; for 5–9, one goes to val and the rest to train; for 10, the split is 8/1/1; above 10, it rounds to approximately 80/10/10. The dialog previews counts. Tiny validation or test sets are poor performance measures; a YOLO export with no validation images is not ready to train. Reopening the same source images starts a new session with new internal IDs, so its split may differ. A `splits.json` manifest lists the packaged names for every group. For YOLO and COCO, image and annotation paths are also organized by split. VOC keeps matching XML files in `Annotations/` and adds `ImageSets/Main/train.txt`, `val.txt`, and `test.txt`. VGG, CSV, and Boundless retain their usual native data files alongside `splits.json`.
 
-| Format | Supported shapes | ZIP contents |
+Packaged images use ordered names such as `001-coco.jpg`, `002-coco.jpg`, even when uploads share a filename. Annotation files reference those packaged names. Coordinates remain based on the original image dimensions. The status line reports how many annotations a format skipped.
+
+| Format | Supported shapes | ZIP contents (without optional split) |
 | --- | --- | --- |
-| YOLO | Boxes | `images/`, matching `labels/*.txt`, root `classes.txt`, root `image-map.json` |
-| Pascal VOC | Boxes | `JPEGImages/`, matching `Annotations/*.xml`, root `image-map.json` |
-| COCO | Boxes and polygons | `images/`, `annotations/instances.json`, root `image-map.json` |
-| VGG | Boxes, lines, points, polygons | Root-level images and `via_region_data.json`, root `image-map.json` |
-| CSV | Boxes, lines, points, polygons | `images/`, `labels.csv`, root `image-map.json` |
-| Boundless JSON | Boxes, lines, points, polygons | `images/`, `boundless.json`, root `image-map.json` |
+| YOLO | Boxes | `images/`, matching `labels/*.txt`, root `classes.txt` and `data.yaml` |
+| Pascal VOC | Boxes | `JPEGImages/`, matching `Annotations/*.xml` |
+| COCO | Boxes and polygons | `images/`, `annotations/instances.json` |
+| VGG | Boxes, lines, points, polygons | Root-level images and `via_region_data.json` |
+| CSV | Boxes, lines, points, polygons | `images/`, `labels.csv` |
+| Boundless JSON | Boxes, lines, points, polygons | `images/`, `boundless.json` |
 
-**YOLO** lines are `class_id x_center y_center width height`, normalized to `[0, 1]` with six decimal places. IDs start at zero and correspond to the root `classes.txt`, following the first appearance of box labels. Images without boxes get an empty TXT. Lines, points, and polygons are never converted to boxes. A training tool may also need its own dataset configuration, such as `data.yaml`.
+With a split, YOLO uses `images/train/`, `images/val/`, `images/test/` and matching `labels/` subfolders; `data.yaml` points to the image folders and omits `test` when empty. With no split, its `data.yaml` is a starter configuration: assign distinct validation images before training, since `images/val/` starts empty. COCO uses `annotations/instances_train.json`, `instances_val.json`, and `instances_test.json` for nonempty groups, each referencing images in its matching folder. Category IDs remain consistent across splits. Add `image-map.json` with the dialog checkbox if needed.
+
+**YOLO** lines are `class_id x_center y_center width height`, normalized to `[0, 1]` with six decimal places. IDs start at zero and correspond to the root `classes.txt`, following the first appearance of box labels. Images without boxes get an empty TXT. Lines, points, and polygons are never converted to boxes. The included `data.yaml` lists the exported classes and the selected image paths.
 
 **Pascal VOC** XML includes one `<object>` per box, with one-based inclusive `xmin`, `ymin`, `xmax`, `ymax`. Its `<filename>` matches the corresponding packaged image, including the numbered prefix. The `<depth>` value is fixed at 3; it does not inspect source channels. PNG, AVIF, and other supported originals remain in their original formats inside the historically named `JPEGImages/` directory.
 
-**COCO** has dataset `images`, `categories`, and `annotations` in one JSON; categories start at ID 1, and polygons include segmentation and area. Image `file_name` values point into `images/`. Lines and points are omitted.
+**COCO** has dataset `images`, `categories`, and `annotations` in one JSON; categories start at ID 1, and polygons include segmentation and area. Image `file_name` values point into `images/` (and the matching split folder when enabled). Lines and points are omitted.
 
 **VGG** uses VIA 2 style regions for rectangles, polylines, points, and polygons. Images and JSON share the ZIP root; `filename` references the packaged name. The original name remains in `file_attributes.original_filename`.
 
