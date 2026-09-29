@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const $=id=>document.getElementById(id);
-  const ui=Object.fromEntries(['file','export-dialog','export-form','export-name','export-details','cancel-export','confirm-export','export-menu','json','json-current','yolo','yolo-all','voc-current','voc-all','coco','vgg','csv','undo','clear','reset','drop','empty','image-wrap','image','overlay','crosshair','crosshair-coordinates','meta','status','classes','class-count','annotations','count','label-input','description-input','rename','delete','label-dialog','label-form','cancel-label','new-label','new-description','image-count','image-list','previous','next','position','tool-select','tool-pan','tool-box','tool-line','tool-point','tool-polygon','finish-polygon','zoom-in','zoom-out','zoom-fit','zoom-level'].map(id=>[id,$(id)]));
+  const ui=Object.fromEntries(['file','export-dialog','export-form','export-name','export-details','include-images','include-map','split-dataset','split-choice','cancel-export','confirm-export','export-menu','json','json-current','yolo','yolo-all','voc-current','voc-all','coco','vgg','csv','undo','clear','reset','drop','empty','image-wrap','image','overlay','crosshair','crosshair-coordinates','meta','status','classes','class-count','annotations','count','label-input','description-input','rename','delete','label-dialog','label-form','cancel-label','new-label','new-description','image-count','image-list','previous','next','position','tool-select','tool-pan','tool-box','tool-line','tool-point','tool-polygon','finish-polygon','zoom-in','zoom-out','zoom-fit','zoom-level'].map(id=>[id,$(id)]));
   const project={images:[]};
   let activeId=null,draft=null,polygonDraft=null,pending=null,editDraft=null,panDraft=null,lastLabel='',session=0,tool='box',spacePan=false,lastPointer=null;
   const active=()=>project.images.find(item=>item.id===activeId)||null;
@@ -259,11 +259,11 @@
     });
     return `<?xml version="1.0" encoding="UTF-8"?>\n<annotation>\n  <filename>${xmlText(filename)}</filename>\n  <size><width>${image.width}</width><height>${image.height}</height><depth>3</depth></size>\n  <segmented>0</segmented>\n${objects.join('\n')}\n</annotation>\n`;
   }
-  function cocoDataset(images){
-    const supported=images.flatMap(image=>image.annotations).filter(b=>['box','polygon'].includes(b.type||'box'));
+  function cocoDataset(entries,allImages,splitName=''){
+    const supported=allImages.flatMap(image=>image.annotations).filter(b=>['box','polygon'].includes(b.type||'box'));
     const names=[...new Set(supported.map(b=>b.label))],categories=names.map((name,i)=>({id:i+1,name,supercategory:''}));let nextId=1;
-    const records=images.map((image,i)=>({id:i+1,file_name:`images/${imageName(image,i)}`,width:image.width,height:image.height}));
-    const annotations=images.flatMap((image,i)=>image.annotations.flatMap(b=>{
+    const records=entries.map(({image,index})=>({id:index+1,file_name:`images/${splitName?splitName+'/':''}${imageName(image,index)}`,width:image.width,height:image.height}));
+    const annotations=entries.flatMap(({image,index})=>image.annotations.flatMap(b=>{
       const type=b.type||'box';if(type!=='box'&&type!=='polygon')return[];
       let bbox,area,segmentation=[];
       if(type==='box'){bbox=[b.x,b.y,b.width,b.height];area=b.width*b.height;}
@@ -271,9 +271,26 @@
         bbox=[xmin,ymin,Math.max(...xs)-xmin,Math.max(...ys)-ymin];
         area=Math.abs(b.points.reduce((sum,p,j)=>sum+p.x*b.points[(j+1)%b.points.length].y-p.y*b.points[(j+1)%b.points.length].x,0))/2;
         segmentation=[b.points.flatMap(p=>[p.x,p.y])];}
-      return[{id:nextId++,image_id:i+1,category_id:names.indexOf(b.label)+1,bbox,area,iscrowd:0,segmentation}];
+      return[{id:nextId++,image_id:index+1,category_id:names.indexOf(b.label)+1,bbox,area,iscrowd:0,segmentation}];
     }));
     return{info:{description:'Boundless export'},licenses:[],images:records,annotations,categories};
+  }
+  // Stable across repeated exports of the same page; duplicate filenames use distinct image IDs.
+  function datasetSplit(images){
+    const ordered=images.map((image,index)=>({image,index})).sort((a,b)=>{
+      const hash=value=>{let h=2166136261;for(const char of value){h=Math.imul(h^char.charCodeAt(0),16777619);}return h>>>0;};
+      return hash(a.image.id)-hash(b.image.id)||a.index-b.index;
+    });
+    const count=images.length,train=count<5?count:count<10?count-1:Math.round(count*.8);
+    const val=count<5?0:count<10?1:Math.max(1,Math.round(count*.1));
+    const groups={train:ordered.slice(0,train),val:ordered.slice(train,train+val),test:ordered.slice(train+val)};
+    return groups;
+  }
+  const splitNames=['train','val','test'];
+  function yoloYaml(classes,groups,split){
+    const quoted=value=>JSON.stringify(value);
+    const names=classes.map((name,index)=>`  ${index}: ${quoted(name)}`).join('\n');
+    return `# Paths are relative to this data.yaml\n${split?'':'# Unsplit export: assign distinct train/val images before training.\n'}path: .\ntrain: images/${split?'train':''}\nval: images/${split?'val':'val'}\n${groups.test.length?'test: images/test\n':''}nc: ${classes.length}\nnames:\n${names||'  {}'}\n`;
   }
   function vggDataset(images){
     const data={};images.forEach((image,index)=>{
@@ -298,26 +315,40 @@
       }
     });return'\ufeff'+rows.join('\r\n')+'\r\n';
   }
-  function exportFiles(format,images,current){
+  function exportFiles(format,images,current,options={}){
+    const {includeImages=true,includeMap=false,split=false}=options;
     const files=[],all=images.flatMap(image=>image.annotations),boxes=all.filter(b=>(b.type||'box')==='box');let included=all.length;
+    const groups=split&&!current?datasetSplit(images):null;
+    const entries=images.map((image,index)=>({image,index}));
+    const folderFor=index=>groups?splitNames.find(name=>groups[name].some(entry=>entry.index===index))+'/':'';
+    const addImages=folder=>{if(includeImages)entries.forEach(({image,index})=>files.push([`${folder}${format==='yolo'||format==='coco'?folderFor(index):''}${imageName(image,index)}`,image.file]));else if(folder)files.push([folder,'']);if(groups&&(format==='yolo'||format==='coco')&&folder)for(const name of splitNames)files.push([`${folder}${name}/`,'']);if(format==='yolo'&&!groups)files.push(['images/val/','']);};
     if(format==='yolo'){
       const classes=[...new Set(boxes.map(b=>b.label))];included=boxes.length;
-      images.forEach((image,index)=>{const lines=image.annotations.filter(b=>(b.type||'box')==='box').map(b=>yoloLine(b,image,classes));files.push([`labels/${imageName(image,index).replace(/\.[^.]+$/,'.txt')}`,lines.join('\n')+(lines.length?'\n':'')]);});
-      files.push(['classes.txt',classes.join('\n')+(classes.length?'\n':'')],mapFile(images),...imageFiles(images,'images/'));
+      entries.forEach(({image,index})=>{const lines=image.annotations.filter(b=>(b.type||'box')==='box').map(b=>yoloLine(b,image,classes));files.push([`labels/${folderFor(index)}${imageName(image,index).replace(/\.[^.]+$/,'.txt')}`,lines.join('\n')+(lines.length?'\n':'')]);});
+      if(groups)for(const name of splitNames)files.push([`labels/${name}/`,'']);
+      files.push(['classes.txt',classes.join('\n')+(classes.length?'\n':'')],['data.yaml',yoloYaml(classes,groups||{train:entries,val:[],test:[]},!!groups)]);addImages('images/');
     }else if(format==='voc'){
       included=boxes.length;
-      images.forEach((image,index)=>files.push([`Annotations/${imageName(image,index).replace(/\.[^.]+$/,'.xml')}`,vocXml(image,imageName(image,index))]));
-      files.push(mapFile(images),...imageFiles(images,'JPEGImages/'));
+      entries.forEach(({image,index})=>files.push([`Annotations/${imageName(image,index).replace(/\.[^.]+$/,'.xml')}`,vocXml(image,imageName(image,index))]));
+      if(groups)for(const name of splitNames)files.push([`ImageSets/Main/${name}.txt`,groups[name].map(({image,index})=>imageName(image,index).replace(/\.[^.]+$/,'')).join('\n')+(groups[name].length?'\n':'')]);
+      addImages('JPEGImages/');
     }else if(format==='coco'){
       included=all.filter(b=>['box','polygon'].includes(b.type||'box')).length;
-      files.push(['annotations/instances.json',json(cocoDataset(images))],mapFile(images),...imageFiles(images,'images/'));
-    }else if(format==='vgg')files.push(['via_region_data.json',json(vggDataset(images))],mapFile(images),...imageFiles(images,''));
-    else if(format==='csv')files.push(['labels.csv',csvDataset(images)],mapFile(images),...imageFiles(images,'images/'));
+      if(groups){for(const name of splitNames)if(groups[name].length)files.push([`annotations/instances_${name}.json`,json(cocoDataset(groups[name],images,name))]);}
+      else files.push(['annotations/instances.json',json(cocoDataset(entries,images))]);
+      addImages('images/');
+    }else if(format==='vgg'){files.push(['via_region_data.json',json(vggDataset(images))]);addImages('');}
+    else if(format==='csv'){files.push(['labels.csv',csvDataset(images)]);addImages('images/');}
     else if(format==='json'){
       const data=current?{image:{filename:imageName(images[0],0),original_filename:images[0].filename,width:images[0].width,height:images[0].height},annotations:structuredClone(images[0].annotations)}:{images:images.map(exported)};
-      files.push(['boundless.json',json(data)],mapFile(images),...imageFiles(images,'images/'));
+      files.push(['boundless.json',json(data)]);addImages('images/');
     }
-    return{files,included,total:all.length};
+    if(groups){
+      // CSV, VGG, Boundless, and VOC keep their native data layout; this manifest assigns images to splits.
+      files.push(['splits.json',json(Object.fromEntries(splitNames.map(name=>[name,groups[name].map(({image,index})=>imageName(image,index))])))]);
+    }
+    if(includeMap)files.push(mapFile(images));
+    return{files,included,total:all.length,groups};
   }
   // Store entries without compression: image bytes stay unchanged. ZIP32 cannot hold 4 GiB files.
   async function zipFiles(files){const encoder=new TextEncoder(),parts=[],directory=[];let offset=0;
@@ -334,12 +365,24 @@
   const exportDefaults={yolo:'boundless-yolo',voc:'boundless-voc',coco:'boundless-coco',vgg:'boundless-vgg',csv:'boundless-csv',json:'boundless-dataset'};
   let exportRequest=null,exportBusy=false;
   function announceExport(format,included,total){const skipped=total-included;status(`Exported ${format}: ${included} ${included===1?'annotation':'annotations'}${skipped?`; skipped ${skipped} unsupported ${skipped===1?'shape':'shapes'}`:''}.`);}
+  const exportOptions=()=>({includeImages:ui['include-images'].checked,includeMap:ui['include-map'].checked,split:ui['split-dataset'].checked});
+  function updateExportDetails(){if(!exportRequest)return;const {format,images,current}=exportRequest;
+    const {files,groups}=exportFiles(format,images,current,exportOptions()),encoder=new TextEncoder();
+    // This ZIP uses stored entries, so every byte and header is known before packaging.
+    const size=files.reduce((sum,[name,content])=>sum+(typeof content==='string'?encoder.encode(content).length:content.size)+76+2*encoder.encode(name).length,22);
+    const display=size<1024?`${size} B`:size<1048576?`${(size/1024).toFixed(1)} KiB`:`${(size/1048576).toFixed(2)} MiB`;
+    const count=groups?`Train ${groups.train.length} · Val ${groups.val.length} · Test ${groups.test.length}. `:'';
+    const warning=groups&&groups.val.length===0?'No validation images: add more images before YOLO training. ':groups&&groups.val.length===1?'One validation image gives an unreliable evaluation. ':'';
+    ui['export-details'].textContent=`${images.length} ${images.length===1?'image':'images'}. ${count}Estimated ZIP size: ${display} (stored without compression). ${warning}${!ui['include-images'].checked?'Image references remain, but image files are omitted. ':''}Only the outer ZIP is renamed.`;
+  }
   function openExport(format,current){const images=current?[active()].filter(Boolean):[...project.images];if(!images.length)return;
-    exportRequest={format,images,current};const bytes=images.reduce((sum,image)=>sum+image.file.size,0);
+    exportRequest={format,images,current};ui['split-choice'].hidden=current;
+    ui['include-images'].checked=true;ui['include-map'].checked=false;ui['split-dataset'].checked=false;
     ui['export-name'].value=current?`${safeStem(images[0])}-${format}`:exportDefaults[format];
-    ui['export-details'].textContent=`${images.length} ${images.length===1?'image':'images'} included · Approximately ${(bytes/1024/1024).toFixed(1)} MB of original images. Only the ZIP filename changes; image and annotation names inside stay matched.`;
+    updateExportDetails();
     ui['export-dialog'].showModal();ui['export-name'].focus();ui['export-name'].select();
   }
+  for(const key of ['include-images','include-map','split-dataset'])ui[key].addEventListener('change',updateExportDetails);
   for(const [id,format,current] of [['yolo','yolo',true],['yolo-all','yolo',false],['voc-current','voc',true],['voc-all','voc',false],['coco','coco',false],['vgg','vgg',false],['csv','csv',false],['json-current','json',true],['json','json',false]])ui[id].addEventListener('click',()=>openExport(format,current));
   ui['cancel-export'].addEventListener('click',()=>ui['export-dialog'].close());
   ui['export-dialog'].addEventListener('close',()=>{exportRequest=null;});
@@ -347,7 +390,7 @@
     let name=ui['export-name'].value.trim().replace(/\.zip$/i,'').replace(/[\\/:*?"<>|\x00-\x1f]/g,'_').replace(/[. ]+$/,'');
     if(!name){ui['export-name'].setCustomValidity('Enter a filename.');ui['export-name'].reportValidity();return;}
     const {format,images,current}=exportRequest;exportBusy=true;ui['confirm-export'].disabled=true;status('Packaging images and annotations locally…');
-    try{const {files,included,total}=exportFiles(format,images,current),blob=await zipFiles(files);download(`${name}.zip`,blob,'application/zip');ui['export-dialog'].close();announceExport(format.toUpperCase(),included,total);}
+    try{const {files,included,total}=exportFiles(format,images,current,exportOptions()),blob=await zipFiles(files);download(`${name}.zip`,blob,'application/zip');ui['export-dialog'].close();announceExport(format.toUpperCase(),included,total);}
     catch(error){status(`Export failed: ${error.message}`);}
     finally{exportBusy=false;ui['confirm-export'].disabled=false;}
   });
