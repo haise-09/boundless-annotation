@@ -13,4 +13,8 @@
 .export-submenu{position:absolute;top:0;left:100%;width:184px;padding:6px;background:#172337;border:1px solid #49617c;border-radius:9px;box-shadow:0 16px 36px #000b}
 .export-submenu button{display:block;width:100%;text-align:left;padding:9px 10px;background:transparent;border:0}
 .export-submenu button:hover,.export-submenu button:focus-visible{background:#293b55}
+.export-group>summary,.export-option{display:grid;grid-template-columns:minmax(0,1fr) 104px 12px;align-items:center;gap:7px;min-height:44px}
+.export-group>summary strong,.export-option strong{font:inherit;min-width:0}
+.export-group>summary small,.export-option small{margin:0;line-height:1.3}
+.export-group>summary span,.export-option span{text-align:right}
 @media(max-width:740px){.export-popover{width:min(300px,calc(100vw - 40px));max-height:min(65vh,520px);overflow:auto}.export-submenu{position:static;width:100%;margin:2px 0 6px;box-shadow:none;background:#111d2d}.export-group>summary span{transform:rotate(90deg)}}

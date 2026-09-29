@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const $=id=>document.getElementById(id);
-  const ui=Object.fromEntries(['file','export-menu','json','json-current','yolo','yolo-all','voc-current','voc-all','coco','vgg','csv','undo','clear','reset','drop','empty','image-wrap','image','overlay','crosshair','crosshair-coordinates','meta','status','classes','class-count','annotations','count','label-input','description-input','rename','delete','label-dialog','label-form','cancel-label','new-label','new-description','image-count','image-list','previous','next','position','tool-select','tool-pan','tool-box','tool-line','tool-point','tool-polygon','finish-polygon','zoom-in','zoom-out','zoom-fit','zoom-level'].map(id=>[id,$(id)]));
+  const ui=Object.fromEntries(['file','export-dialog','export-form','export-name','export-details','cancel-export','confirm-export','export-menu','json','json-current','yolo','yolo-all','voc-current','voc-all','coco','vgg','csv','undo','clear','reset','drop','empty','image-wrap','image','overlay','crosshair','crosshair-coordinates','meta','status','classes','class-count','annotations','count','label-input','description-input','rename','delete','label-dialog','label-form','cancel-label','new-label','new-description','image-count','image-list','previous','next','position','tool-select','tool-pan','tool-box','tool-line','tool-point','tool-polygon','finish-polygon','zoom-in','zoom-out','zoom-fit','zoom-level'].map(id=>[id,$(id)]));
   const project={images:[]};
   let activeId=null,draft=null,polygonDraft=null,pending=null,editDraft=null,panDraft=null,lastLabel='',session=0,tool='box',spacePan=false,lastPointer=null;
   const active=()=>project.images.find(item=>item.id===activeId)||null;
@@ -125,7 +125,7 @@
   function probeFile(file){return new Promise(resolve=>{
     const url=URL.createObjectURL(file),probe=new Image();
     probe.onload=()=>{if(!probe.naturalWidth||!probe.naturalHeight){URL.revokeObjectURL(url);resolve(null);return;}
-      resolve({id:crypto.randomUUID(),filename:file.name,size:file.size,width:probe.naturalWidth,height:probe.naturalHeight,url,annotations:[],selected:null,nextId:1,history:[]});};
+      resolve({id:crypto.randomUUID(),filename:file.name,file,size:file.size,width:probe.naturalWidth,height:probe.naturalHeight,url,annotations:[],selected:null,nextId:1,history:[]});};
     probe.onerror=()=>{URL.revokeObjectURL(url);resolve(null);};probe.src=url;
   });}
   const supportedImage=file=>['image/jpeg','image/png','image/webp','image/avif','image/bmp','image/x-ms-bmp'].includes(file.type)||(!file.type&&/\.(?:jpe?g|png|webp|avif|bmp)$/i.test(file.name));
@@ -240,65 +240,44 @@
   ui['export-menu'].addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeExportMenu();}});
   document.addEventListener('pointerdown',e=>{if(!ui['export-menu'].contains(e.target))closeExportMenu();});
   ui['export-menu'].querySelectorAll('.export-popover button').forEach(button=>button.addEventListener('click',closeExportMenu));
-  function download(name,content,type){const blob=new Blob([content],{type}),href=URL.createObjectURL(blob),link=document.createElement('a');link.href=href;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(href),60000);}
-  const stem=image=>image.filename.replace(/\.[^.]+$/,'')||'annotations';
-  const exported=image=>({filename:image.filename,width:image.width,height:image.height,annotations:image.annotations.map(b=>({...b}))});
-  ui.json.addEventListener('click',()=>{if(!project.images.length)return;download('boundless-dataset.json',JSON.stringify({images:project.images.map(exported)},null,2)+'\n','application/json');});
-  ui['json-current'].addEventListener('click',()=>{const image=active();if(!image)return;download(`${stem(image)}-${image.id.slice(0,8)}.json`,JSON.stringify({image:{filename:image.filename,width:image.width,height:image.height},annotations:image.annotations.map(b=>({...b}))},null,2)+'\n','application/json');});
-  ui.yolo.addEventListener('click',()=>{const image=active();if(!image)return;const rectangles=image.annotations.filter(b=>(b.type||'box')==='box'),classes=[...new Set(rectangles.map(b=>b.label))];
-    const lines=rectangles.map(b=>[classes.indexOf(b.label),(b.x+b.width/2)/image.width,(b.y+b.height/2)/image.height,b.width/image.width,b.height/image.height].map((n,i)=>i?clamp(n,0,1).toFixed(6):n).join(' '));
-    const name=`${stem(image)}-${image.id.slice(0,8)}`;download(`${name}.txt`,lines.join('\n')+(lines.length?'\n':''),'text/plain');download(`${name}-classes.txt`,classes.join('\n')+(classes.length?'\n':''),'text/plain');announceExport('YOLO',rectangles.length,image.annotations.length);});
+  function download(name,content,type){const blob=content instanceof Blob?content:new Blob([content],{type}),href=URL.createObjectURL(blob),link=document.createElement('a');link.href=href;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(href),60000);}
+  const stem=image=>image.filename.replace(/\.[^.]+$/,'')||'image';
+  const safeStem=image=>stem(image).replace(/[^a-z0-9_.-]/gi,'_').replace(/^\.+/,'').slice(0,70)||'image';
+  const imageName=(image,index)=>`${String(index+1).padStart(3,'0')}-${safeStem(image)}${/\.(?:jpe?g|png|webp|avif|bmp)$/i.exec(image.filename)?.[0]||'.png'}`;
+  const json=value=>JSON.stringify(value,null,2)+'\n';
+  const imageMap=images=>({images:images.map((image,index)=>({original_filename:image.filename,exported_filename:imageName(image,index),width:image.width,height:image.height}))});
+  const imageFiles=(images,folder)=>images.map((image,index)=>[`${folder}${imageName(image,index)}`,image.file]);
+  const mapFile=images=>['image-map.json',json(imageMap(images))];
+  const exported=(image,index)=>({filename:imageName(image,index),original_filename:image.filename,width:image.width,height:image.height,annotations:structuredClone(image.annotations)});
   const yoloLine=(b,image,classes)=>[classes.indexOf(b.label),(b.x+b.width/2)/image.width,(b.y+b.height/2)/image.height,b.width/image.width,b.height/image.height].map((n,i)=>i?clamp(n,0,1).toFixed(6):n).join(' ');
-  function zipFiles(files){const encoder=new TextEncoder(),parts=[],directory=[];let offset=0;const table=Array.from({length:256},(_,i)=>{let c=i;for(let j=0;j<8;j++)c=c&1?0xedb88320^(c>>>1):c>>>1;return c>>>0;});
-    const crc32=data=>{let c=0xffffffff;for(const byte of data)c=table[(c^byte)&255]^(c>>>8);return(c^0xffffffff)>>>0;};
-    for(const [filename,content] of files){const name=encoder.encode(filename),data=encoder.encode(content),crc=crc32(data),local=new Uint8Array(30+name.length),lv=new DataView(local.buffer);lv.setUint32(0,0x04034b50,true);lv.setUint16(4,20,true);lv.setUint16(6,0x0800,true);lv.setUint32(14,crc,true);lv.setUint32(18,data.length,true);lv.setUint32(22,data.length,true);lv.setUint16(26,name.length,true);local.set(name,30);parts.push(local,data);
-      const central=new Uint8Array(46+name.length),cv=new DataView(central.buffer);cv.setUint32(0,0x02014b50,true);cv.setUint16(4,20,true);cv.setUint16(6,20,true);cv.setUint16(8,0x0800,true);cv.setUint32(16,crc,true);cv.setUint32(20,data.length,true);cv.setUint32(24,data.length,true);cv.setUint16(28,name.length,true);cv.setUint32(42,offset,true);central.set(name,46);directory.push(central);offset+=local.length+data.length;}
-    const directorySize=directory.reduce((sum,entry)=>sum+entry.length,0),end=new Uint8Array(22),view=new DataView(end.buffer);view.setUint32(0,0x06054b50,true);view.setUint16(8,files.length,true);view.setUint16(10,files.length,true);view.setUint32(12,directorySize,true);view.setUint32(16,offset,true);return new Blob([...parts,...directory,end],{type:'application/zip'});
-  }
-  ui['yolo-all'].addEventListener('click',()=>{if(!project.images.length)return;const classes=[...new Set(project.images.flatMap(image=>image.annotations.filter(b=>(b.type||'box')==='box').map(b=>b.label)))];const manifest=[];
-    const files=project.images.map((image,index)=>{const name=`${String(index+1).padStart(3,'0')}-${stem(image).replace(/[^a-z0-9_-]/gi,'_').slice(0,60)||'image'}.txt`;manifest.push({annotation_file:name,image_filename:image.filename,width:image.width,height:image.height});const lines=image.annotations.filter(b=>(b.type||'box')==='box').map(b=>yoloLine(b,image,classes));return[name,lines.join('\n')+(lines.length?'\n':'')];});
-    files.push(['classes.txt',classes.join('\n')+(classes.length?'\n':'')],['image-map.json',JSON.stringify({images:manifest},null,2)+'\n']);download('boundless-yolo.zip',zipFiles(files),'application/zip');announceExport('YOLO ZIP',project.images.flatMap(item=>item.annotations).filter(b=>(b.type||'box')==='box').length,project.images.reduce((sum,item)=>sum+item.annotations.length,0));
-  });
-  function announceExport(format,included,total){const skipped=total-included;status(`Exported ${format}: ${included} ${included===1?'annotation':'annotations'}${skipped?`; skipped ${skipped} unsupported ${skipped===1?'shape':'shapes'}`:''}.`);}
   const xmlText=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[char]));
-  const imageExportName=image=>project.images.filter(item=>item.filename===image.filename).length>1?`${stem(image)}-${image.id.slice(0,8)}${image.filename.slice(stem(image).length)}`:image.filename;
-  function vocXml(image){
+  function vocXml(image,filename){
     const objects=image.annotations.filter(b=>(b.type||'box')==='box').map(b=>{
       const xmin=clamp(Math.round(b.x)+1,1,image.width),ymin=clamp(Math.round(b.y)+1,1,image.height);
       const xmax=clamp(Math.round(b.x+b.width),xmin,image.width),ymax=clamp(Math.round(b.y+b.height),ymin,image.height);
       return `  <object><name>${xmlText(b.label)}</name><pose>Unspecified</pose><truncated>0</truncated><difficult>0</difficult><bndbox><xmin>${xmin}</xmin><ymin>${ymin}</ymin><xmax>${xmax}</xmax><ymax>${ymax}</ymax></bndbox></object>`;
     });
-    return `<?xml version="1.0" encoding="UTF-8"?>\n<annotation>\n  <filename>${xmlText(imageExportName(image))}</filename>\n  <size><width>${image.width}</width><height>${image.height}</height><depth>3</depth></size>\n  <segmented>0</segmented>\n${objects.join('\n')}\n</annotation>\n`;
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<annotation>\n  <filename>${xmlText(filename)}</filename>\n  <size><width>${image.width}</width><height>${image.height}</height><depth>3</depth></size>\n  <segmented>0</segmented>\n${objects.join('\n')}\n</annotation>\n`;
   }
-  ui['voc-current'].addEventListener('click',()=>{const image=active();if(!image)return;download(`${stem(image)}-${image.id.slice(0,8)}.xml`,vocXml(image),'application/xml');announceExport('VOC XML',image.annotations.filter(b=>(b.type||'box')==='box').length,image.annotations.length);});
-  ui['voc-all'].addEventListener('click',()=>{if(!project.images.length)return;const manifest=[];
-    const files=project.images.map((image,index)=>{const name=`${String(index+1).padStart(3,'0')}-${stem(image).replace(/[^a-z0-9_-]/gi,'_').slice(0,60)||'image'}.xml`;manifest.push({annotation_file:name,image_filename:image.filename,export_image_filename:imageExportName(image),width:image.width,height:image.height});return[name,vocXml(image)];});
-    files.push(['image-map.json',JSON.stringify({images:manifest},null,2)+'\n']);download('boundless-voc.zip',zipFiles(files),'application/zip');
-    const all=project.images.flatMap(image=>image.annotations);announceExport('VOC ZIP',all.filter(b=>(b.type||'box')==='box').length,all.length);
-  });
-  function cocoDataset(){
-    const supported=project.images.flatMap(image=>image.annotations).filter(b=>['box','polygon'].includes(b.type||'box'));
+  function cocoDataset(images){
+    const supported=images.flatMap(image=>image.annotations).filter(b=>['box','polygon'].includes(b.type||'box'));
     const names=[...new Set(supported.map(b=>b.label))],categories=names.map((name,i)=>({id:i+1,name,supercategory:''}));let nextId=1;
-    const images=project.images.map((image,i)=>({id:i+1,file_name:imageExportName(image),width:image.width,height:image.height}));
-    const annotations=project.images.flatMap((image,i)=>image.annotations.flatMap(b=>{
+    const records=images.map((image,i)=>({id:i+1,file_name:`images/${imageName(image,i)}`,width:image.width,height:image.height}));
+    const annotations=images.flatMap((image,i)=>image.annotations.flatMap(b=>{
       const type=b.type||'box';if(type!=='box'&&type!=='polygon')return[];
       let bbox,area,segmentation=[];
       if(type==='box'){bbox=[b.x,b.y,b.width,b.height];area=b.width*b.height;}
-      else{
-        const xs=b.points.map(p=>p.x),ys=b.points.map(p=>p.y),xmin=Math.min(...xs),ymin=Math.min(...ys);
+      else{const xs=b.points.map(p=>p.x),ys=b.points.map(p=>p.y),xmin=Math.min(...xs),ymin=Math.min(...ys);
         bbox=[xmin,ymin,Math.max(...xs)-xmin,Math.max(...ys)-ymin];
         area=Math.abs(b.points.reduce((sum,p,j)=>sum+p.x*b.points[(j+1)%b.points.length].y-p.y*b.points[(j+1)%b.points.length].x,0))/2;
-        segmentation=[b.points.flatMap(p=>[p.x,p.y])];
-      }
+        segmentation=[b.points.flatMap(p=>[p.x,p.y])];}
       return[{id:nextId++,image_id:i+1,category_id:names.indexOf(b.label)+1,bbox,area,iscrowd:0,segmentation}];
     }));
-    return{info:{description:'Boundless export'},licenses:[],images,annotations,categories};
+    return{info:{description:'Boundless export'},licenses:[],images:records,annotations,categories};
   }
-  ui.coco.addEventListener('click',()=>{if(!project.images.length)return;download('boundless-coco.json',JSON.stringify(cocoDataset(),null,2)+'\n','application/json');const all=project.images.flatMap(image=>image.annotations);announceExport('COCO JSON',all.filter(b=>['box','polygon'].includes(b.type||'box')).length,all.length);});
-  function vggDataset(){
-    const data={};
-    for(const image of project.images){
-      const filename=imageExportName(image),size=image.size??0;
+  function vggDataset(images){
+    const data={};images.forEach((image,index)=>{
+      const filename=imageName(image,index),size=image.size??image.file.size;
       const regions=image.annotations.map(b=>{
         const type=b.type||'box';let shape;
         if(type==='box')shape={name:'rect',x:b.x,y:b.y,width:b.width,height:b.height};
@@ -307,22 +286,71 @@
         return{shape_attributes:shape,region_attributes:{label:b.label,description:b.description||''}};
       });
       data[`${filename}${size}`]={filename,size,regions,file_attributes:{original_filename:image.filename}};
-    }
-    return data;
+    });return data;
   }
-  ui.vgg.addEventListener('click',()=>{if(!project.images.length)return;download('boundless-vgg.json',JSON.stringify(vggDataset(),null,2)+'\n','application/json');status(`Exported VGG JSON with ${project.images.length} ${project.images.length===1?'image':'images'} and all annotation types.`);});
   const csvCell=value=>{let text=String(value??'');if(/^[=+@-]/.test(text))text="'"+text;return`"${text.replace(/"/g,'""')}"`;};
-  function csvDataset(){
-    const columns=['image_index','image_filename','image_width','image_height','annotation_id','type','label','description','x','y','width','height','x1','y1','x2','y2','points_json'];
-    const rows=[columns.join(',')];
-    project.images.forEach((image,index)=>{
+  function csvDataset(images){
+    const columns=['image_index','image_filename','original_filename','image_width','image_height','annotation_id','type','label','description','x','y','width','height','x1','y1','x2','y2','points_json'];
+    const rows=[columns.join(',')];images.forEach((image,index)=>{
       for(const b of image.annotations.length?image.annotations:[null]){
-        const type=b?.type||'box',values=[index+1,image.filename,image.width,image.height,b?.id??'',b?type:'',b?.label??'',b?.description??'',b&&(type==='box'||type==='point')?b.x:'',b&&(type==='box'||type==='point')?b.y:'',type==='box'&&b?b.width:'',type==='box'&&b?b.height:'',type==='line'&&b?b.x1:'',type==='line'&&b?b.y1:'',type==='line'&&b?b.x2:'',type==='line'&&b?b.y2:'',type==='polygon'&&b?JSON.stringify(b.points):''];
+        const type=b?.type||'box',values=[index+1,imageName(image,index),image.filename,image.width,image.height,b?.id??'',b?type:'',b?.label??'',b?.description??'',b&&(type==='box'||type==='point')?b.x:'',b&&(type==='box'||type==='point')?b.y:'',type==='box'&&b?b.width:'',type==='box'&&b?b.height:'',type==='line'&&b?b.x1:'',type==='line'&&b?b.y1:'',type==='line'&&b?b.x2:'',type==='line'&&b?b.y2:'',type==='polygon'&&b?JSON.stringify(b.points):''];
         rows.push(values.map(csvCell).join(','));
       }
-    });
-    return'\ufeff'+rows.join('\r\n')+'\r\n';
+    });return'\ufeff'+rows.join('\r\n')+'\r\n';
   }
-  ui.csv.addEventListener('click',()=>{if(!project.images.length)return;download('boundless-annotations.csv',csvDataset(),'text/csv;charset=utf-8');status(`Exported CSV with all annotation types across ${project.images.length} ${project.images.length===1?'image':'images'}.`);});
+  function exportFiles(format,images,current){
+    const files=[],all=images.flatMap(image=>image.annotations),boxes=all.filter(b=>(b.type||'box')==='box');let included=all.length;
+    if(format==='yolo'){
+      const classes=[...new Set(boxes.map(b=>b.label))];included=boxes.length;
+      images.forEach((image,index)=>{const lines=image.annotations.filter(b=>(b.type||'box')==='box').map(b=>yoloLine(b,image,classes));files.push([`labels/${imageName(image,index).replace(/\.[^.]+$/,'.txt')}`,lines.join('\n')+(lines.length?'\n':'')]);});
+      files.push(['classes.txt',classes.join('\n')+(classes.length?'\n':'')],mapFile(images),...imageFiles(images,'images/'));
+    }else if(format==='voc'){
+      included=boxes.length;
+      images.forEach((image,index)=>files.push([`Annotations/${imageName(image,index).replace(/\.[^.]+$/,'.xml')}`,vocXml(image,imageName(image,index))]));
+      files.push(mapFile(images),...imageFiles(images,'JPEGImages/'));
+    }else if(format==='coco'){
+      included=all.filter(b=>['box','polygon'].includes(b.type||'box')).length;
+      files.push(['annotations/instances.json',json(cocoDataset(images))],mapFile(images),...imageFiles(images,'images/'));
+    }else if(format==='vgg')files.push(['via_region_data.json',json(vggDataset(images))],mapFile(images),...imageFiles(images,''));
+    else if(format==='csv')files.push(['labels.csv',csvDataset(images)],mapFile(images),...imageFiles(images,'images/'));
+    else if(format==='json'){
+      const data=current?{image:{filename:imageName(images[0],0),original_filename:images[0].filename,width:images[0].width,height:images[0].height},annotations:structuredClone(images[0].annotations)}:{images:images.map(exported)};
+      files.push(['boundless.json',json(data)],mapFile(images),...imageFiles(images,'images/'));
+    }
+    return{files,included,total:all.length};
+  }
+  // Store entries without compression: image bytes stay unchanged. ZIP32 cannot hold 4 GiB files.
+  async function zipFiles(files){const encoder=new TextEncoder(),parts=[],directory=[];let offset=0;
+    const table=Array.from({length:256},(_,i)=>{let c=i;for(let j=0;j<8;j++)c=c&1?0xedb88320^(c>>>1):c>>>1;return c>>>0;});
+    const crc32=data=>{let c=0xffffffff;for(const byte of data)c=table[(c^byte)&255]^(c>>>8);return(c^0xffffffff)>>>0;};
+    if(files.length>65535)throw new Error('Too many files for one ZIP.');
+    for(const [filename,content] of files){const name=encoder.encode(filename),data=typeof content==='string'?encoder.encode(content):new Uint8Array(await content.arrayBuffer());
+      if(data.length>=0xffffffff||offset+30+name.length+data.length>=0xffffffff)throw new Error('Dataset too large for a browser ZIP (4 GB limit).');
+      const crc=crc32(data),local=new Uint8Array(30+name.length),lv=new DataView(local.buffer);lv.setUint32(0,0x04034b50,true);lv.setUint16(4,20,true);lv.setUint16(6,0x0800,true);lv.setUint32(14,crc,true);lv.setUint32(18,data.length,true);lv.setUint32(22,data.length,true);lv.setUint16(26,name.length,true);local.set(name,30);parts.push(local,data);
+      const central=new Uint8Array(46+name.length),cv=new DataView(central.buffer);cv.setUint32(0,0x02014b50,true);cv.setUint16(4,20,true);cv.setUint16(6,20,true);cv.setUint16(8,0x0800,true);cv.setUint32(16,crc,true);cv.setUint32(20,data.length,true);cv.setUint32(24,data.length,true);cv.setUint16(28,name.length,true);cv.setUint32(42,offset,true);central.set(name,46);directory.push(central);offset+=local.length+data.length;}
+    const size=directory.reduce((sum,entry)=>sum+entry.length,0);if(offset+size>=0xffffffff)throw new Error('Dataset too large for a browser ZIP (4 GB limit).');
+    const end=new Uint8Array(22),view=new DataView(end.buffer);view.setUint32(0,0x06054b50,true);view.setUint16(8,files.length,true);view.setUint16(10,files.length,true);view.setUint32(12,size,true);view.setUint32(16,offset,true);return new Blob([...parts,...directory,end],{type:'application/zip'});
+  }
+  const exportDefaults={yolo:'boundless-yolo',voc:'boundless-voc',coco:'boundless-coco',vgg:'boundless-vgg',csv:'boundless-csv',json:'boundless-dataset'};
+  let exportRequest=null,exportBusy=false;
+  function announceExport(format,included,total){const skipped=total-included;status(`Exported ${format}: ${included} ${included===1?'annotation':'annotations'}${skipped?`; skipped ${skipped} unsupported ${skipped===1?'shape':'shapes'}`:''}.`);}
+  function openExport(format,current){const images=current?[active()].filter(Boolean):[...project.images];if(!images.length)return;
+    exportRequest={format,images,current};const bytes=images.reduce((sum,image)=>sum+image.file.size,0);
+    ui['export-name'].value=current?`${safeStem(images[0])}-${format}`:exportDefaults[format];
+    ui['export-details'].textContent=`${images.length} ${images.length===1?'image':'images'} included · Approximately ${(bytes/1024/1024).toFixed(1)} MB of original images. Only the ZIP filename changes; image and annotation names inside stay matched.`;
+    ui['export-dialog'].showModal();ui['export-name'].focus();ui['export-name'].select();
+  }
+  for(const [id,format,current] of [['yolo','yolo',true],['yolo-all','yolo',false],['voc-current','voc',true],['voc-all','voc',false],['coco','coco',false],['vgg','vgg',false],['csv','csv',false],['json-current','json',true],['json','json',false]])ui[id].addEventListener('click',()=>openExport(format,current));
+  ui['cancel-export'].addEventListener('click',()=>ui['export-dialog'].close());
+  ui['export-dialog'].addEventListener('close',()=>{exportRequest=null;});
+  ui['export-form'].addEventListener('submit',async e=>{e.preventDefault();if(exportBusy||!exportRequest)return;
+    let name=ui['export-name'].value.trim().replace(/\.zip$/i,'').replace(/[\\/:*?"<>|\x00-\x1f]/g,'_').replace(/[. ]+$/,'');
+    if(!name){ui['export-name'].setCustomValidity('Enter a filename.');ui['export-name'].reportValidity();return;}
+    const {format,images,current}=exportRequest;exportBusy=true;ui['confirm-export'].disabled=true;status('Packaging images and annotations locally…');
+    try{const {files,included,total}=exportFiles(format,images,current),blob=await zipFiles(files);download(`${name}.zip`,blob,'application/zip');ui['export-dialog'].close();announceExport(format.toUpperCase(),included,total);}
+    catch(error){status(`Export failed: ${error.message}`);}
+    finally{exportBusy=false;ui['confirm-export'].disabled=false;}
+  });
+  ui['export-name'].addEventListener('input',()=>ui['export-name'].setCustomValidity(''));
   render();
 })();
