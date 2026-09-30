@@ -1,6 +1,10 @@
 # Boundless
 
-**Version 1.3.2** · A quick, browser-only image annotation tool.
+**AI feature preview, based on version 1.3.2** · A quick, browser-only image annotation tool.
+
+## AI assistance preview
+
+This branch adds **Auto Annotate (Boxes)** and **Auto Select (Polygon)** with local browser inference and human review. Accept suggestions to use the existing edit, undo and export controls. Models download only after opting in; images and annotations remain on your device. Manual annotation remains available if AI cannot load. Read [the AI preview guide](ai/README.md) for usage, model downloads, modular architecture, testing and limitations. This prototype is intended for a Netlify deploy preview before merging into production.
 
 ## Version 1.3.2 additions
 
@@ -43,7 +47,7 @@
 
 Project save and reopen is planned for a later version.
 
-A small, static browser app for manually drawing labeled bounding boxes on multiple images. Images stay in your browser. No account, backend, database, AI, or build process is used.
+A small, static browser app for manually drawing labeled bounding boxes on multiple images. Images stay in your browser. No account, backend, database, or build process is used. AI assistance is optional in this feature preview and runs on the device.
 
 ## Use
 
