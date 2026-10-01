@@ -83,6 +83,32 @@ const base=process.env.TEST_URL||'http://localhost:8765';
   assert.equal(JSON.parse(exports.coco.files['annotations/instances.json']).annotations.length,2);
   assert.equal(exports.yolo.files['labels/002-same.txt'],'');
   assert.equal(exports.voc.files['Annotations/002-same.xml'].includes('<object>'),false);
+  // CVAT XML 1.1: every shape, image/label references, attributes and ZIP layout.
+  const cvat=await page.evaluate(()=>{
+    const image=__test.active();image.annotations[0].label='road & <edge> "測試"';image.annotations[0].description='note & <tag>\\nsecond line';
+    const result=__test.exportFiles('cvat',__test.project.images,false,{includeImages:true,includeMap:true,split:true});
+    const text=result.files.find(([name])=>name==='annotations.xml')[1],doc=new DOMParser().parseFromString(text,'application/xml');
+    return {error:!!doc.querySelector('parsererror'),version:doc.querySelector('version').textContent,mode:doc.querySelector('mode').textContent,
+      names:result.files.map(([name])=>name),xml:text,images:[...doc.querySelectorAll('image')].map(el=>({id:el.getAttribute('id'),name:el.getAttribute('name'),width:el.getAttribute('width'),shapes:[...el.children].map(shape=>({type:shape.tagName,label:shape.getAttribute('label'),points:shape.getAttribute('points'),xtl:shape.getAttribute('xtl'),xbr:shape.getAttribute('xbr'),description:shape.querySelector('attribute')?.textContent}))})),labels:[...doc.querySelectorAll('labels > label > name')].map(el=>el.textContent),included:result.included,total:result.total};
+  });
+  assert.equal(cvat.error,false);assert.equal(cvat.version,'1.1');assert.equal(cvat.mode,'annotation');assert.equal(cvat.included,cvat.total);
+  assert(cvat.names.includes('annotations.xml'));assert(cvat.names.includes('image-map.json'));assert(cvat.names.includes('splits.json'));
+  for(const image of cvat.images){assert(cvat.names.includes('images/'+image.name));assert.equal(image.width,'1200');for(const shape of image.shapes)assert(cvat.labels.includes(shape.label));}
+  assert.deepEqual(cvat.images[0].shapes.map(s=>s.type),['polyline','polyline','box','points','polygon','polyline']);
+  assert.equal(cvat.images[0].shapes[0].label,'road & <edge> "測試"');assert.equal(cvat.images[0].shapes[0].points,'120,160;600,320');assert.equal(cvat.images[0].shapes[0].description,'note & <tag>\\nsecond line');
+  assert.equal(cvat.images[0].shapes[2].xtl,'100');assert.equal(cvat.images[0].shapes[2].xbr,'900');assert.equal(cvat.images[0].shapes[3].points,'1000,650');assert.equal(cvat.images[0].shapes.at(-1).points,'900,100;1100,100');
+  const annotationOnly=await page.evaluate(()=>__test.exportFiles('cvat',[__test.active()],true,{includeImages:false}).files.map(([name])=>name));assert.deepEqual(annotationOnly,['annotations.xml','images/']);
+  async function openFormat(id){await page.evaluate(id=>document.getElementById(id).click(),id);}
+  // Partial export must be a conscious opt-in, reset on each opening and scoped correctly.
+  await openFormat('yolo');assert.match(await page.locator('#export-compatibility').textContent(),/Current Image: 1 of 6/);
+  assert.match(await page.locator('#export-skipped').textContent(),/2 polylines/);assert.equal(await page.locator('#confirm-export').isDisabled(),true);
+  assert.equal(await page.locator('#allow-partial').isChecked(),false);
+  await page.evaluate(()=>document.querySelector('#export-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));assert.equal(await page.locator('#export-dialog').isVisible(),true);
+  await page.locator('#allow-partial').check();assert.equal(await page.locator('#confirm-export').isEnabled(),true);
+  await page.locator('#cancel-export').click();await openFormat('yolo-all');assert.match(await page.locator('#export-compatibility').textContent(),/Full Dataset: 1 of 7/);assert.equal(await page.locator('#allow-partial').isChecked(),false);await page.locator('#cancel-export').click();
+  await openFormat('coco');assert.match(await page.locator('#export-compatibility').textContent(),/2 of 7/);assert.equal(await page.locator('#confirm-export').isDisabled(),true);await page.locator('#cancel-export').click();
+  await openFormat('voc-current');assert.equal(await page.locator('#confirm-export').isDisabled(),true);await page.locator('#cancel-export').click();
+  await openFormat('cvat-all');assert.match(await page.locator('#export-compatibility').textContent(),/7 of 7/);assert.equal(await page.locator('#export-warning').isVisible(),false);assert.equal(await page.locator('#confirm-export').isEnabled(),true);await page.locator('#cancel-export').click();
   // Exercise the actual ZIP download with an entered outer filename.
   await page.evaluate(()=>document.getElementById('json-current').click());await page.locator('#export-name').fill('polyline-check');await page.locator('#include-images').uncheck();
   const downloadReady=page.waitForEvent('download');await page.locator('#confirm-export').click();const download=await downloadReady;assert.equal(download.suggestedFilename(),'polyline-check.zip');
@@ -94,5 +120,5 @@ const base=process.env.TEST_URL||'http://localhost:8765';
   const touch=(await annotations(mobile))[0];assert.equal(touch.type,'polyline');for(let i=0;i<2;i++)for(const key of ['x','y'])assert(Math.abs(touch.points[i][key]-original.points[i][key])<=3);
   await mobile.screenshot({path:'/tmp/boundless-polyline-mobile.png',fullPage:true});
   assert.deepEqual(errors,[]);assert.deepEqual(remote,[]);
-  await browser.close();console.log('Passed: polyline desktop/touch creation, finish/cancel, pan continuity, move/vertex edit + undo, legacy lines, shapes, image isolation, original coordinates, exports and ZIP download; no network uploads.');
+  await browser.close();console.log('Passed: polyline desktop/touch creation, finish/cancel, pan continuity, move/vertex edit + undo, legacy lines, shapes, image isolation, original coordinates, CVAT XML, compatibility confirmation, exports and ZIP download; no network uploads.');
 })().catch(error=>{console.error(error);process.exit(1);});
