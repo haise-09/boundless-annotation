@@ -11,7 +11,16 @@ Branch: `feature/polyline-tool`, based on `main` independently of the AI experim
 - Pan and temporary Space panning preserve unfinished vertices. Escape, switching to another drawing tool, or switching images cancels an unfinished path. Nearby duplicate clicks are ignored.
 - Coordinates use original image pixels and stay aligned through zoom/resizing. Every image retains its own shapes and undo history.
 - Existing `type: "line"` annotations retain their endpoint geometry, renderer, editing, and exports; no destructive conversion is performed. New paths use `type: "polyline"` and `points`.
-- VGG, CSV, and Boundless JSON include polylines. YOLO/VOC remain boxes only; COCO remains boxes plus closed polygons and skips open paths, reporting unsupported shapes.
+- CVAT XML, VGG, CSV, and Boundless JSON include polylines. YOLO/VOC remain boxes only; COCO remains boxes plus closed polygons and skips open paths, reporting unsupported shapes.
+
+## CVAT XML and export compatibility
+
+- **CVAT (XML)** offers Current Image and Full Dataset exports using CVAT for images XML **1.1**. Both produce one named ZIP with `annotations.xml` at the root and original files under `images/`. Numbered image names match XML image references and avoid duplicate filename collisions. XML image names are relative to `images/`.
+- Boxes use `<box>`, polygons `<polygon>`, open paths `<polyline>`, and individual points `<points>`. Legacy straight lines become two-point polylines in this export only. Coordinates stay in original-image pixels. Descriptions are declared label attributes and exported as `<attribute name="description">`; they do not change geometry.
+- Include Original Images remains on by default. Turning it off keeps an empty `images/` folder and the XML references so you can supply the matching files separately. `image-map.json` is optional and off by default. Optional dataset splits add `splits.json`; CVAT uses its normal flat image folder and one XML document, not YOLO/COCO training subfolders.
+- **Name Your Export** reports included/total annotations and counts skipped shapes for the selected scope. If any shapes are unsupported, Download ZIP requires the initially unchecked **Export Supported Annotations Only** confirmation. It resets each time the dialog opens. This also applies when zero annotations are supported; you can deliberately export an empty annotation set. Empty unannotated datasets do not require confirmation.
+- Format choices remain available for mixed datasets. YOLO and Pascal VOC support boxes; this app's COCO export supports boxes and polygons. CVAT, VGG, CSV, and Boundless JSON preserve all current Boundless shape types. There is no automatic conversion of open paths into boxes or polygons.
+- CVAT export is an interchange dataset, not a CVAT project backup. When importing annotations into an existing CVAT task, use matching packaged filenames, labels, and the `description` text attribute. Format structure is checked against the [official CVAT XML specification](https://docs.cvat.ai/docs/dataset_management/formats/format-cvat/); import into a live CVAT server has not been tested here.
 
 ## Version 1.3.2 additions
 
@@ -92,6 +101,7 @@ Packaged images use ordered names such as `001-coco.jpg`, `002-coco.jpg`, even w
 | --- | --- | --- |
 | YOLO | Boxes | `images/`, matching `labels/*.txt`, root `classes.txt` and `data.yaml` |
 | Pascal VOC | Boxes | `JPEGImages/`, matching `Annotations/*.xml` |
+| CVAT XML | All shapes | `images/`, `annotations.xml` |
 | COCO | Boxes and polygons | `images/`, `annotations/instances.json` |
 | VGG | Boxes, legacy lines, polylines, points, polygons | Root-level images and `via_region_data.json` |
 | CSV | Boxes, legacy lines, polylines, points, polygons | `images/`, `labels.csv` |
@@ -115,4 +125,4 @@ Descriptions are retained in VGG, CSV, and Boundless JSON; YOLO, VOC, and COCO d
 
 ## Polyline validation
 
-With Playwright installed for development, serve the repository using `python3 -m http.server 8765`, then run `node tests/polyline.cjs`. Set `CHROME_PATH` to use a specific Chromium binary, or `TEST_URL` for a different local server. No test dependencies are loaded by the website. The test covers mouse and touch creation, minimum vertices, Enter/button completion, cancel, pan continuity, move/vertex edit and undo, legacy line compatibility, image isolation, original coordinates at different sizes, and format-specific exports. A test-only intercepted copy of the app exposes state for assertions; production code contains no test hook.
+With Playwright installed for development, serve the repository using `python3 -m http.server 8765`, then run `node tests/polyline.cjs`. Set `CHROME_PATH` to use a specific Chromium binary, or `TEST_URL` for a different local server. No test dependencies are loaded by the website. The test covers mouse and touch creation, minimum vertices, Enter/button completion, cancel, pan continuity, move/vertex edit and undo, legacy line compatibility, image isolation, original coordinates at different sizes, format-specific exports, CVAT XML parsing and shape/filename mappings, and scope-aware partial-export confirmation. A test-only intercepted copy of the app exposes state for assertions; production code contains no test hook.

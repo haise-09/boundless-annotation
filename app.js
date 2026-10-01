@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const $=id=>document.getElementById(id);
-  const ui=Object.fromEntries(['file','export-dialog','export-form','export-name','export-details','include-images','include-map','split-dataset','split-choice','cancel-export','confirm-export','export-menu','json','json-current','yolo','yolo-all','voc-current','voc-all','coco','vgg','csv','undo','clear','reset','drop','empty','image-wrap','image','overlay','crosshair','crosshair-coordinates','meta','status','classes','class-count','annotations','count','label-input','description-input','rename','delete','label-dialog','label-form','cancel-label','new-label','new-description','image-count','image-list','previous','next','position','tool-select','tool-pan','tool-box','tool-polyline','tool-point','tool-polygon','finish-polygon','finish-polyline','zoom-in','zoom-out','zoom-fit','zoom-level'].map(id=>[id,$(id)]));
+  const ui=Object.fromEntries(['file','export-dialog','export-form','export-name','export-details','export-compatibility','export-warning','export-skipped','allow-partial','include-images','include-map','split-dataset','split-choice','cancel-export','confirm-export','export-menu','json','json-current','yolo','yolo-all','voc-current','voc-all','cvat-current','cvat-all','coco','vgg','csv','undo','clear','reset','drop','empty','image-wrap','image','overlay','crosshair','crosshair-coordinates','meta','status','classes','class-count','annotations','count','label-input','description-input','rename','delete','label-dialog','label-form','cancel-label','new-label','new-description','image-count','image-list','previous','next','position','tool-select','tool-pan','tool-box','tool-polyline','tool-point','tool-polygon','finish-polygon','finish-polyline','zoom-in','zoom-out','zoom-fit','zoom-level'].map(id=>[id,$(id)]));
   const project={images:[]};
   let activeId=null,draft=null,pathDraft=null,pending=null,editDraft=null,panDraft=null,lastLabel='',session=0,tool='box',spacePan=false,lastPointer=null;
   const active=()=>project.images.find(item=>item.id===activeId)||null;
@@ -63,8 +63,8 @@
     ui.count.textContent=`${annotations.length} ${annotations.length===1?'annotation':'annotations'}`;
     ui['image-count'].textContent=`${project.images.length} ${project.images.length===1?'image':'images'}`;
     const hasDataset=!!project.images.length;
-    ui.json.disabled=ui['yolo-all'].disabled=ui['voc-all'].disabled=ui.coco.disabled=ui.vgg.disabled=ui.csv.disabled=ui.reset.disabled=!hasDataset;
-    ui['json-current'].disabled=ui.yolo.disabled=ui['voc-current'].disabled=!image;
+    ui.json.disabled=ui['yolo-all'].disabled=ui['voc-all'].disabled=ui['cvat-all'].disabled=ui.coco.disabled=ui.vgg.disabled=ui.csv.disabled=ui.reset.disabled=!hasDataset;
+    ui['json-current'].disabled=ui.yolo.disabled=ui['voc-current'].disabled=ui['cvat-current'].disabled=!image;
     ui['export-menu'].querySelector('.export-trigger').setAttribute('aria-disabled',String(!hasDataset));
     ui['export-menu'].querySelector('.export-trigger').tabIndex=hasDataset?0:-1;
     if(!hasDataset)ui['export-menu'].open=false;
@@ -224,7 +224,7 @@
   const typingTarget=element=>!!element?.closest?.('input, textarea, select, [contenteditable="true"], [role="textbox"]');
   function releaseTemporaryPan(){if(!spacePan)return;spacePan=false;if(panDraft){try{ui.overlay.releasePointerCapture(panDraft.pointer);}catch{}panDraft=null;ui.overlay.classList.remove('panning');}showTool();}
   document.addEventListener('keydown',e=>{
-    if(e.isComposing||ui['label-dialog'].open||typingTarget(e.target)||e.target.closest?.('#export-menu'))return;
+    if(e.isComposing||ui['label-dialog'].open||ui['export-dialog'].open||typingTarget(e.target)||e.target.closest?.('#export-menu'))return;
     const key=e.key.toLowerCase();
     if((e.ctrlKey||e.metaKey)&&!e.altKey&&key==='z'){e.preventDefault();ui.undo.click();return;}
     if(e.ctrlKey||e.metaKey||e.altKey)return;
@@ -326,9 +326,36 @@
       }
     });return'\ufeff'+rows.join('\r\n')+'\r\n';
   }
+  const formatShapes={yolo:['box'],voc:['box'],coco:['box','polygon'],cvat:['box','line','polyline','polygon','point'],vgg:['box','line','polyline','polygon','point'],csv:['box','line','polyline','polygon','point'],json:['box','line','polyline','polygon','point']};
+  function exportCompatibility(format,images){
+    const supported=formatShapes[format];if(!supported)throw new Error('Unknown export format.');
+    const skipped={};let included=0,total=0;
+    for(const image of images)for(const shape of image.annotations){const type=shape.type||'box';total++;if(supported.includes(type))included++;else skipped[type]=(skipped[type]||0)+1;}
+    return {included,total,skipped};
+  }
+  // XML 1.0 excludes control characters; entities preserve label whitespace in attributes.
+  const cvatText=value=>xmlText(String(value??'').replace(/[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu,'')).replace(/\r/g,'&#13;').replace(/\n/g,'&#10;').replace(/\t/g,'&#9;');
+  function cvatXml(images){
+    const labels=[...new Set(images.flatMap(image=>image.annotations.map(b=>b.label)))];
+    const labelXml=labels.map(label=>`<label><name>${cvatText(label)}</name><type>any</type><attributes><attribute><name>description</name><mutable>False</mutable><input_type>text</input_type><default_value></default_value><values></values></attribute></attributes></label>`).join('\n');
+    const records=images.map((image,index)=>{
+      const shapes=image.annotations.map((b,order)=>{
+        const type=b.type||'box',tag=type==='line'?'polyline':type==='point'?'points':type;
+        const points=type==='line'?[{x:b.x1,y:b.y1},{x:b.x2,y:b.y2}]:type==='point'?[{x:b.x,y:b.y}]:b.points;
+        const geometry=type==='box'?`xtl="${b.x}" ytl="${b.y}" xbr="${b.x+b.width}" ybr="${b.y+b.height}"`:`points="${points.map(p=>`${p.x},${p.y}`).join(';')}"`;
+        return `    <${tag} label="${cvatText(b.label)}" ${geometry} occluded="0" z_order="${order}"><attribute name="description">${cvatText(b.description||'')}</attribute></${tag}>`;
+      }).join('\n');
+      // CVAT image names are relative to the ZIP's images/ directory.
+      return `  <image id="${index}" name="${cvatText(imageName(image,index))}" width="${image.width}" height="${image.height}">\n${shapes}\n  </image>`;
+    }).join('\n');
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<annotations>\n  <version>1.1</version>\n  <meta><task><id>0</id><name>Boundless</name><size>${images.length}</size><mode>annotation</mode><overlap>0</overlap><bugtracker></bugtracker><flipped>False</flipped><labels>${labelXml}</labels><segments></segments><owner><username></username><email></email></owner></task></meta>\n${records}\n</annotations>\n`;
+  }
   function exportFiles(format,images,current,options={}){
     const {includeImages=true,includeMap=false,split=false}=options;
-    const files=[],all=images.flatMap(image=>image.annotations),boxes=all.filter(b=>(b.type||'box')==='box');let included=all.length;
+    const compatibility=exportCompatibility(format,images);
+    const all=images.flatMap(image=>image.annotations);
+    images=images.map(image=>({...image,annotations:image.annotations.filter(b=>formatShapes[format].includes(b.type||'box'))}));
+    const files=[],boxes=all.filter(b=>(b.type||'box')==='box');let included=compatibility.included;
     const groups=split&&!current?datasetSplit(images):null;
     const entries=images.map((image,index)=>({image,index}));
     const folderFor=index=>groups?splitNames.find(name=>groups[name].some(entry=>entry.index===index))+'/':'';
@@ -348,14 +375,15 @@
       if(groups){for(const name of splitNames)if(groups[name].length)files.push([`annotations/instances_${name}.json`,json(cocoDataset(groups[name],images,name))]);}
       else files.push(['annotations/instances.json',json(cocoDataset(entries,images))]);
       addImages('images/');
-    }else if(format==='vgg'){files.push(['via_region_data.json',json(vggDataset(images))]);addImages('');}
+    }else if(format==='cvat'){files.push(['annotations.xml',cvatXml(images)]);addImages('images/');}
+    else if(format==='vgg'){files.push(['via_region_data.json',json(vggDataset(images))]);addImages('');}
     else if(format==='csv'){files.push(['labels.csv',csvDataset(images)]);addImages('images/');}
     else if(format==='json'){
       const data=current?{image:{filename:imageName(images[0],0),original_filename:images[0].filename,width:images[0].width,height:images[0].height},annotations:structuredClone(images[0].annotations)}:{images:images.map(exported)};
       files.push(['boundless.json',json(data)]);addImages('images/');
     }
     if(groups){
-      // CSV, VGG, Boundless, and VOC keep their native data layout; this manifest assigns images to splits.
+      // CVAT, CSV, VGG, Boundless, and VOC keep their native data layout; this manifest assigns images to splits.
       files.push(['splits.json',json(Object.fromEntries(splitNames.map(name=>[name,groups[name].map(({image,index})=>imageName(image,index))])))]);
     }
     if(includeMap)files.push(mapFile(images));
@@ -373,11 +401,17 @@
     const size=directory.reduce((sum,entry)=>sum+entry.length,0);if(offset+size>=0xffffffff)throw new Error('Dataset too large for a browser ZIP (4 GB limit).');
     const end=new Uint8Array(22),view=new DataView(end.buffer);view.setUint32(0,0x06054b50,true);view.setUint16(8,files.length,true);view.setUint16(10,files.length,true);view.setUint32(12,size,true);view.setUint32(16,offset,true);return new Blob([...parts,...directory,end],{type:'application/zip'});
   }
-  const exportDefaults={yolo:'boundless-yolo',voc:'boundless-voc',coco:'boundless-coco',vgg:'boundless-vgg',csv:'boundless-csv',json:'boundless-dataset'};
+  const exportDefaults={yolo:'boundless-yolo',voc:'boundless-voc',cvat:'boundless-cvat',coco:'boundless-coco',vgg:'boundless-vgg',csv:'boundless-csv',json:'boundless-dataset'};
   let exportRequest=null,exportBusy=false;
   function announceExport(format,included,total){const skipped=total-included;status(`Exported ${format}: ${included} ${included===1?'annotation':'annotations'}${skipped?`; skipped ${skipped} unsupported ${skipped===1?'shape':'shapes'}`:''}.`);}
   const exportOptions=()=>({includeImages:ui['include-images'].checked,includeMap:ui['include-map'].checked,split:ui['split-dataset'].checked});
   function updateExportDetails(){if(!exportRequest)return;const {format,images,current}=exportRequest;
+    const compatibility=exportCompatibility(format,images),skipped=compatibility.total-compatibility.included;
+    ui['export-compatibility'].textContent=`${current?'Current Image':'Full Dataset'}: ${compatibility.included} of ${compatibility.total} annotations will be exported.`;
+    ui['export-warning'].hidden=!skipped;
+    ui['export-skipped'].textContent=skipped?`Skipped: ${Object.entries(compatibility.skipped).map(([type,count])=>`${count} ${type}${count===1?'':'s'}`).join(', ')}. Choose CVAT XML, VGG, CSV, or Boundless JSON to include all supported Boundless shapes.`:'';
+    ui['allow-partial'].required=!!skipped;ui['allow-partial'].disabled=!skipped;
+    ui['confirm-export'].disabled=exportBusy||!!skipped&&!ui['allow-partial'].checked;
     const {files,groups}=exportFiles(format,images,current,exportOptions()),encoder=new TextEncoder();
     // This ZIP uses stored entries, so every byte and header is known before packaging.
     const size=files.reduce((sum,[name,content])=>sum+(typeof content==='string'?encoder.encode(content).length:content.size)+76+2*encoder.encode(name).length,22);
@@ -387,23 +421,25 @@
     ui['export-details'].textContent=`${images.length} ${images.length===1?'image':'images'}. ${count}Estimated ZIP size: ${display} (stored without compression). ${warning}${!ui['include-images'].checked?'Image references remain, but image files are omitted. ':''}Only the outer ZIP is renamed.`;
   }
   function openExport(format,current){const images=current?[active()].filter(Boolean):[...project.images];if(!images.length)return;
-    exportRequest={format,images,current};ui['split-choice'].hidden=current;
+    exportRequest={format,images,current};ui['allow-partial'].checked=false;ui['split-choice'].hidden=current;
     ui['include-images'].checked=true;ui['include-map'].checked=false;ui['split-dataset'].checked=false;
     ui['export-name'].value=current?`${safeStem(images[0])}-${format}`:exportDefaults[format];
     updateExportDetails();
     ui['export-dialog'].showModal();ui['export-name'].focus();ui['export-name'].select();
   }
-  for(const key of ['include-images','include-map','split-dataset'])ui[key].addEventListener('change',updateExportDetails);
-  for(const [id,format,current] of [['yolo','yolo',true],['yolo-all','yolo',false],['voc-current','voc',true],['voc-all','voc',false],['coco','coco',false],['vgg','vgg',false],['csv','csv',false],['json-current','json',true],['json','json',false]])ui[id].addEventListener('click',()=>openExport(format,current));
+  for(const key of ['include-images','include-map','split-dataset','allow-partial'])ui[key].addEventListener('change',updateExportDetails);
+  for(const [id,format,current] of [['yolo','yolo',true],['yolo-all','yolo',false],['voc-current','voc',true],['voc-all','voc',false],['cvat-current','cvat',true],['cvat-all','cvat',false],['coco','coco',false],['vgg','vgg',false],['csv','csv',false],['json-current','json',true],['json','json',false]])ui[id].addEventListener('click',()=>openExport(format,current));
   ui['cancel-export'].addEventListener('click',()=>ui['export-dialog'].close());
-  ui['export-dialog'].addEventListener('close',()=>{exportRequest=null;});
+  ui['export-dialog'].addEventListener('close',()=>{if(!ui['export-dialog'].open)exportRequest=null;});
   ui['export-form'].addEventListener('submit',async e=>{e.preventDefault();if(exportBusy||!exportRequest)return;
     let name=ui['export-name'].value.trim().replace(/\.zip$/i,'').replace(/[\\/:*?"<>|\x00-\x1f]/g,'_').replace(/[. ]+$/,'');
     if(!name){ui['export-name'].setCustomValidity('Enter a filename.');ui['export-name'].reportValidity();return;}
-    const {format,images,current}=exportRequest;exportBusy=true;ui['confirm-export'].disabled=true;status('Packaging images and annotations locally…');
+    const {format,images,current}=exportRequest,compatibility=exportCompatibility(format,images);
+    if(compatibility.included<compatibility.total&&!ui['allow-partial'].checked){updateExportDetails();ui['allow-partial'].reportValidity();return;}
+    exportBusy=true;ui['confirm-export'].disabled=true;status('Packaging images and annotations locally…');
     try{const {files,included,total}=exportFiles(format,images,current,exportOptions()),blob=await zipFiles(files);download(`${name}.zip`,blob,'application/zip');ui['export-dialog'].close();announceExport(format.toUpperCase(),included,total);}
     catch(error){status(`Export failed: ${error.message}`);}
-    finally{exportBusy=false;ui['confirm-export'].disabled=false;}
+    finally{exportBusy=false;updateExportDetails();}
   });
   ui['export-name'].addEventListener('input',()=>ui['export-name'].setCustomValidity(''));
   render();
