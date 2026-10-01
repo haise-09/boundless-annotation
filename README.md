@@ -1,10 +1,10 @@
 # Boundless
 
-**Polyline feature preview (based on v1.3.2)** · A quick, browser-only image annotation tool.
+**Version 1.4.0** · A quick, browser-only image annotation tool.
 
-## Polyline feature preview
+## Version 1.4.0 additions
 
-Branch: `feature/polyline-tool`, based on `main` independently of the AI experiment. This is not a tagged release.
+Polyline annotation, CVAT XML export, and explicit confirmation before partial exports. AI assistance remains a separate, unmerged experiment and is not included in this release.
 
 - Polyline replaces the Line tool on shortcut **3**. Click two or more vertices and finish with Enter or **Finish Polyline**. It stays open; a two-vertex polyline is a straight line. Clicking the first vertex does not auto-finish a polyline.
 - See a live preview, use Select to move the whole path or drag its vertex handles, rename/delete it, and undo completed changes.
