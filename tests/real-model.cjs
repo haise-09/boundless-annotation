@@ -15,13 +15,13 @@ const assert=require('node:assert/strict');
       const text=await page.locator('#ai-message').textContent();
       if(text!==last){console.log(text);last=text;}
       if(text.startsWith('AI unavailable:'))throw Error(text);
-      if(text.includes('suggestion(s).')){console.log('Elapsed seconds:',Math.round((Date.now()-started)/1000));return;}
+      if(text.includes('Review suggestions before accepting.')){console.log('Elapsed seconds:',Math.round((Date.now()-started)/1000));return;}
       await page.waitForTimeout(1500);
     }
     throw Error('Inference exceeded six minutes');
   }
   await page.locator('#ai-detect').click();await page.getByRole('button',{name:'Download & Continue'}).click();
-  await waitForResult();assert.match(await page.locator('#ai-review').textContent(),/dog/i);
+  await waitForResult();assert.match(await page.locator('#ai-supported-labels').textContent(),/dog/);assert.match(await page.locator('#ai-review').textContent(),/dog/i);
   await page.locator('#ai-accept').click();
   assert.match(await page.locator('#annotations').textContent(),/BOX\s+dog/);
   assert.equal(await page.locator('#tool-smart').count(),0);

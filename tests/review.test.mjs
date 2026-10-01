@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {overlapRatio,isLikelyDuplicate,normalizeSuggestions} from '../ai/review.js';
+const box={type:'box',label:'dog',x:10,y:10,width:100,height:80,score:.9};
+assert.equal(overlapRatio(box,box),1);
+assert(isLikelyDuplicate(box,[{...box,label:' DOG '}]));
+assert(!isLikelyDuplicate(box,[{...box,label:'cat'}]));
+assert(!isLikelyDuplicate(box,[{...box,x:300}]));
+assert(!isLikelyDuplicate(box,[{...box,type:'point'}]));
+assert.equal(normalizeSuggestions([box,{...box,x:NaN},{...box,score:2},{...box,type:'polygon'}],{width:200,height:150}).length,1);
+assert.equal(normalizeSuggestions([{...box,x:180}],{width:200,height:150})[0].width,20);
+assert.deepEqual(normalizeSuggestions(null,{width:200,height:150}),[]);
+console.log('Review rules passed: overlap, label/type isolation, invalid and clipped geometry.');

@@ -1,8 +1,8 @@
 import {createDetector} from './adapters.js';
-let adapter=null,busy=false,currentId=null;
-const report=text=>self.postMessage({type:'progress',id:currentId,text});
+let adapter=null,busy=false,currentId=null,currentImageId=null;
+const report=text=>self.postMessage({type:'progress',id:currentId,imageId:currentImageId,text});
 self.onmessage=async({data})=>{
-  if(busy)return;busy=true;currentId=data.id;
+  if(busy)return;busy=true;currentId=data.id;currentImageId=data.imageId;
   try{
     if(data.kind!=='detect')throw new Error('Unsupported AI action. Only box detection is available.');
     if(!adapter)adapter=await createDetector(report);

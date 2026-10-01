@@ -20,6 +20,6 @@ export async function createDetector(report){
   return {async run({file,width,height}){
     const raw=await readImage(file);report('Detecting objects locally…');
     const results=await detector(raw,{threshold:0.1,percentage:false});
-    return {suggestions:results.map(result=>detectionBox(result,raw,{width,height})).filter(Boolean),backend:'CPU / WASM'};
+    return {suggestions:results.map(result=>detectionBox(result,raw,{width,height})).filter(Boolean),backend:'CPU / WASM',labels:Object.values(detector.model.config.id2label||{})};
   },dispose:()=>detector.dispose()};
 }
