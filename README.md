@@ -6,10 +6,10 @@
 
 This branch adds optional **Auto Annotate (Boxes)** with local browser inference and human review. It includes the stable v1.4.0 polyline/CVAT tools. AI is not yet merged into production.
 
-- Review dashed, labeled suggestions before accepting. Filter by confidence or detected class; select/deselect shown suggestions, **Accept Selected**, or **Accept All New** (all shown nonduplicates).
+- Review dashed, labeled suggestions before accepting. Adjust confidence, check individual suggestions, then **Accept Selected**. A compact count shows suggestions and selections.
 - Re-running replaces only the pending preview. Likely duplicates of accepted boxes (same label, intersection-over-union at least 80%) start unchecked. Explicit selection can override this; existing annotations are never replaced.
 - Accepted batches use the existing per-image Undo, editing and export tools. Confidence/model metadata is retained only in native Boundless JSON.
-- Models download after consent; images and annotation data remain local. Loading/download/detection status, cancellation, and error recovery are provided. Supported labels are shown after detection. No AI polygon tool is included.
+- Models download after consent; images and annotation data remain local. Loading/download/detection status, cancellation, and error recovery are provided. No AI polygon tool is included.
 
 Read [the AI preview guide](ai/README.md) for usage, model downloads, adapter design, testing and limitations.
 
