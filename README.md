@@ -1,10 +1,37 @@
 # Boundless
 
-**AI feature preview, based on version 1.3.2** · A quick, browser-only image annotation tool.
+**AI feature preview, based on version 1.4.0** · A quick, browser-only image annotation tool.
 
 ## AI assistance preview
 
-This branch adds **Auto Annotate (Boxes)** with local browser inference and human review. Accept suggestions to use the existing edit, undo and export controls. Models download only after opting in; images and annotations remain on your device. Manual annotation remains available if AI cannot load. Read [the AI preview guide](ai/README.md) for usage, model downloads, modular architecture, testing and limitations. AI polygon selection has been removed from this preview; the manual Polygon tool and existing polygon annotations are unchanged. This prototype is intended for a Netlify deploy preview before merging into production.
+This branch adds optional **Auto Annotate (Boxes)** with local browser inference and human review. It includes the stable v1.4.0 polyline/CVAT tools. AI is not yet merged into production.
+
+- Review dashed, labeled suggestions before accepting. Filter by confidence or detected class; select/deselect shown suggestions, **Accept Selected**, or **Accept All New** (all shown nonduplicates).
+- Re-running replaces only the pending preview. Likely duplicates of accepted boxes (same label, intersection-over-union at least 80%) start unchecked. Explicit selection can override this; existing annotations are never replaced.
+- Accepted batches use the existing per-image Undo, editing and export tools. Confidence/model metadata is retained only in native Boundless JSON.
+- Models download after consent; images and annotation data remain local. Loading/download/detection status, cancellation, and error recovery are provided. Supported labels are shown after detection. No AI polygon tool is included.
+
+Read [the AI preview guide](ai/README.md) for usage, model downloads, adapter design, testing and limitations.
+
+## Version 1.4.0 additions
+
+Polyline annotation, CVAT XML export, and explicit confirmation before partial exports. These stable features are included in this AI preview; the production v1.4.0 release does not include AI assistance.
+
+- Polyline replaces the Line tool on shortcut **3**. Click two or more vertices and finish with Enter or **Finish Polyline**. It stays open; a two-vertex polyline is a straight line. Clicking the first vertex does not auto-finish a polyline.
+- See a live preview, use Select to move the whole path or drag its vertex handles, rename/delete it, and undo completed changes.
+- Pan and temporary Space panning preserve unfinished vertices. Escape, switching to another drawing tool, or switching images cancels an unfinished path. Nearby duplicate clicks are ignored.
+- Coordinates use original image pixels and stay aligned through zoom/resizing. Every image retains its own shapes and undo history.
+- Existing `type: "line"` annotations retain their endpoint geometry, renderer, editing, and exports; no destructive conversion is performed. New paths use `type: "polyline"` and `points`.
+- CVAT XML, VGG, CSV, and Boundless JSON include polylines. YOLO/VOC remain boxes only; COCO remains boxes plus closed polygons and skips open paths, reporting unsupported shapes.
+
+## CVAT XML and export compatibility
+
+- **CVAT (XML)** offers Current Image and Full Dataset exports using CVAT for images XML **1.1**. Both produce one named ZIP with `annotations.xml` at the root and original files under `images/`. Numbered image names match XML image references and avoid duplicate filename collisions. XML image names are relative to `images/`.
+- Boxes use `<box>`, polygons `<polygon>`, open paths `<polyline>`, and individual points `<points>`. Legacy straight lines become two-point polylines in this export only. Coordinates stay in original-image pixels. Descriptions are declared label attributes and exported as `<attribute name="description">`; they do not change geometry.
+- Include Original Images remains on by default. Turning it off keeps an empty `images/` folder and the XML references so you can supply the matching files separately. `image-map.json` is optional and off by default. Optional dataset splits add `splits.json`; CVAT uses its normal flat image folder and one XML document, not YOLO/COCO training subfolders.
+- **Name Your Export** reports included/total annotations and counts skipped shapes for the selected scope. If any shapes are unsupported, Download ZIP requires the initially unchecked **Export Supported Annotations Only** confirmation. It resets each time the dialog opens. This also applies when zero annotations are supported; you can deliberately export an empty annotation set. Empty unannotated datasets do not require confirmation.
+- Format choices remain available for mixed datasets. YOLO and Pascal VOC support boxes; this app's COCO export supports boxes and polygons. CVAT, VGG, CSV, and Boundless JSON preserve all current Boundless shape types. There is no automatic conversion of open paths into boxes or polygons.
+- CVAT export is an interchange dataset, not a CVAT project backup. When importing annotations into an existing CVAT task, use matching packaged filenames, labels, and the `description` text attribute. Format structure is checked against the [official CVAT XML specification](https://docs.cvat.ai/docs/dataset_management/formats/format-cvat/); import into a live CVAT server has not been tested here.
 
 ## Version 1.3.2 additions
 
@@ -47,28 +74,29 @@ This branch adds **Auto Annotate (Boxes)** with local browser inference and huma
 
 Project save and reopen is planned for a later version.
 
-A small, static browser app for manually drawing labeled bounding boxes on multiple images. Images stay in your browser. No account, backend, database, or build process is used. AI assistance is optional in this feature preview and runs on the device.
+A small, static browser app for manually drawing labeled bounding boxes on multiple images. Images stay in your browser. No account, backend, database, or build process is used. Optional AI assistance in this preview runs locally on the device.
 
 ## Use
 
-Open `index.html` locally or deploy this folder to Netlify with publish directory `.` and no build command. Choose or drop one or several JPG, PNG, WebP, AVIF, or BMP images. AVIF and BMP still require support from your browser's image decoder; unsupported files are rejected locally. Use **Add Images** to add more at any time. Click a thumbnail or use Previous / Next to switch images. Each image owns its annotations, selection, and label IDs, even when filenames match. The × beside a thumbnail removes just that image, asking for confirmation if it contains annotations. **Clear annotations** clears only the active image; **Clear dataset** removes all images (with confirmation if there are annotations).
+Open `index.html` locally or deploy this folder to Netlify with publish directory `.` and no build command. Choose or drop one or several JPG, PNG, WebP, AVIF, or BMP images. AVIF and BMP still require support from your browser's image decoder; unsupported files are rejected locally. Use **Add Images** to add more at any time. Click a thumbnail or use Previous / Next to switch images. Each image owns its annotations, selection, and label IDs, even when filenames match. The × beside a thumbnail removes just that image, asking for confirmation if it contains annotations. **Clear Annotations** clears only the active image; **Clear Dataset** removes all images (with confirmation if there are annotations).
 
-Choose **Select**, **Box**, **Line**, **Point**, **Polygon**, or **Pan** in the workspace. Box and Line use click and drag, including from inside an existing annotation; Point uses a single click. With Polygon, click at least three vertices, then click its first vertex, **Finish polygon**, or press Enter; Escape discards an unfinished polygon. Type a label after completing a shape, then press Enter/Done or click **Add annotation**. The chosen tool stays active until you change it. Use Select or click an item in the list to select a shape. Drag selected shapes to move them, box corners to resize, line endpoints or polygon vertices to reposition. Zoom with +, −, and Fit, then drag with Pan to explore the image. The original coordinates stay accurate at any zoom. Move the pointer over the image to see a crosshair and its original-image x/y position; Pan hides the guide and shows the grab cursor. The last class label is offered for the next annotation; optionally add a description in the label dialog or selected annotation controls. Save changes to update both label and description. Undo reverses the last completed annotation change on the active image, including Clear Annotations; it does not undo zoom, pan, image removal, or clearing the entire dataset. A drag counts as one change when released; canceled or unchanged drags do not add an undo step. The last 50 changes for each image remain available until that image is removed or the page closes. Escape cancels a drawing; Delete or Backspace deletes the selected annotation when focus is outside a text field.
+Choose **Select**, **Box**, **Polyline**, **Point**, **Polygon**, or **Pan** in the workspace. Box uses click and drag, including from inside an existing annotation; Point uses a single click. With Polyline, click at least two vertices, then **Finish Polyline** or Enter. The path remains open. With Polygon, click at least three vertices, then click its first vertex, **Finish Polygon**, or press Enter; Escape discards an unfinished polygon. Type a label after completing a shape, then press Enter/Done or click **Add Annotation**. The chosen tool stays active until you change it. Use Select or click an item in the list to select a shape. Drag selected shapes to move them, box corners to resize, legacy line endpoints or polyline/polygon vertices to reposition. Zoom with +, −, and Fit, then drag with Pan to explore the image. The original coordinates stay accurate at any zoom. Move the pointer over the image to see a crosshair and its original-image x/y position; Pan hides the guide and shows the grab cursor. The last class label is offered for the next annotation; optionally add a description in the label dialog or selected annotation controls. Save changes to update both label and description. Undo reverses the last completed annotation change on the active image, including Clear Annotations; it does not undo zoom, pan, image removal, or clearing the entire dataset. A drag counts as one change when released; canceled or unchanged drags do not add an undo step. The last 50 changes for each image remain available until that image is removed or the page closes. Escape cancels a drawing; Delete or Backspace deletes the selected annotation when focus is outside a text field.
 
 
 ### Keyboard shortcuts
 
 | Action | Shortcut |
 | --- | --- |
-| Select, Box, Line, Point, Polygon | `1`, `2`, `3`, `4`, `5` |
+| Select, Box, Polyline, Point, Polygon | `1`, `2`, `3`, `4`, `5` |
 | Select Pan | `H` |
 | Temporarily pan | Hold `Space`; release to return to the previous tool |
 | Zoom in, zoom out, fit image | `Q`, `E`, `F` |
 | Undo the last annotation change on the active image | `Ctrl+Z` (`⌘Z` on Mac) |
+| Finish a polyline | `Enter` or Finish Polyline (at least two vertices) |
 | Finish a polygon | `Enter` or click its first vertex (at least three vertices) |
 | Cancel an unfinished drawing | `Escape` |
 
-Shortcuts are ignored while typing in an input, description, or dialog. Switching between Polygon and Pan preserves unfinished polygon vertices, including during temporary Space panning. Switching to other tools cancels an unfinished polygon. Starting Pan during an unfinished Box or Line drag cancels that drag.
+Shortcuts are ignored while typing in an input, description, or dialog. Switching between Polyline/Polygon and Pan preserves unfinished vertices, including temporary Space panning. Return to the same drawing tool to continue. Switching to another drawing tool cancels the unfinished path. Starting Pan during an unfinished Box drag cancels that drag.
 
 Images and annotations live only in the current page's memory and disappear on refresh. Export before leaving. Uploaded image bytes are never sent to a server; ZIP exports include the original images locally by default.
 
@@ -84,23 +112,28 @@ Packaged images use ordered names such as `001-coco.jpg`, `002-coco.jpg`, even w
 | --- | --- | --- |
 | YOLO | Boxes | `images/`, matching `labels/*.txt`, root `classes.txt` and `data.yaml` |
 | Pascal VOC | Boxes | `JPEGImages/`, matching `Annotations/*.xml` |
+| CVAT XML | All shapes | `images/`, `annotations.xml` |
 | COCO | Boxes and polygons | `images/`, `annotations/instances.json` |
-| VGG | Boxes, lines, points, polygons | Root-level images and `via_region_data.json` |
-| CSV | Boxes, lines, points, polygons | `images/`, `labels.csv` |
-| Boundless JSON | Boxes, lines, points, polygons | `images/`, `boundless.json` |
+| VGG | Boxes, legacy lines, polylines, points, polygons | Root-level images and `via_region_data.json` |
+| CSV | Boxes, legacy lines, polylines, points, polygons | `images/`, `labels.csv` |
+| Boundless JSON | Boxes, legacy lines, polylines, points, polygons | `images/`, `boundless.json` |
 
 With a split, YOLO uses `images/train/`, `images/val/`, `images/test/` and matching `labels/` subfolders; `data.yaml` points to the image folders and omits `test` when empty. With no split, its `data.yaml` is a starter configuration: assign distinct validation images before training, since `images/val/` starts empty. COCO uses `annotations/instances_train.json`, `instances_val.json`, and `instances_test.json` for nonempty groups, each referencing images in its matching folder. Category IDs remain consistent across splits. Add `image-map.json` with the dialog checkbox if needed.
 
-**YOLO** lines are `class_id x_center y_center width height`, normalized to `[0, 1]` with six decimal places. IDs start at zero and correspond to the root `classes.txt`, following the first appearance of box labels. Images without boxes get an empty TXT. Lines, points, and polygons are never converted to boxes. The included `data.yaml` lists the exported classes and the selected image paths.
+**YOLO** lines are `class_id x_center y_center width height`, normalized to `[0, 1]` with six decimal places. IDs start at zero and correspond to the root `classes.txt`, following the first appearance of box labels. Images without boxes get an empty TXT. Lines, polylines, points, and polygons are never converted to boxes. The included `data.yaml` lists the exported classes and the selected image paths.
 
 **Pascal VOC** XML includes one `<object>` per box, with one-based inclusive `xmin`, `ymin`, `xmax`, `ymax`. Its `<filename>` matches the corresponding packaged image, including the numbered prefix. The `<depth>` value is fixed at 3; it does not inspect source channels. PNG, AVIF, and other supported originals remain in their original formats inside the historically named `JPEGImages/` directory.
 
-**COCO** has dataset `images`, `categories`, and `annotations` in one JSON; categories start at ID 1, and polygons include segmentation and area. Image `file_name` values point into `images/` (and the matching split folder when enabled). Lines and points are omitted.
+**COCO** has dataset `images`, `categories`, and `annotations` in one JSON; categories start at ID 1, and polygons include segmentation and area. Image `file_name` values point into `images/` (and the matching split folder when enabled). Lines, polylines, and points are omitted.
 
 **VGG** uses VIA 2 style regions for rectangles, polylines, points, and polygons. Images and JSON share the ZIP root; `filename` references the packaged name. The original name remains in `file_attributes.original_filename`.
 
-**CSV** has one row per annotation, including packaged and original image names, dimensions, type, label, description, and geometry columns. Empty images get a row without annotation fields. Polygon vertices are serialized in `points_json`. The CSV is UTF-8 with a BOM; text resembling spreadsheet formulas is escaped.
+**CSV** has one row per annotation, including packaged and original image names, dimensions, type, label, description, and geometry columns. Empty images get a row without annotation fields. Polyline and polygon vertices are serialized in `points_json`. The CSV is UTF-8 with a BOM; text resembling spreadsheet formulas is escaped.
 
-**Boundless JSON** retains each annotation's `id`, `type`, `label`, optional `description`, and original-resolution geometry. Box geometry is `x`, `y`, `width`, `height`; line is `x1`, `y1`, `x2`, `y2`; point is `x`, `y`; polygon is `points: [{x, y}, ...]`. Full Dataset contains an `images` array. Current Image keeps the earlier `{image, annotations}` structure. `filename` refers to the packaged image; `original_filename` preserves the upload name.
+**Boundless JSON** retains each annotation's `id`, `type`, `label`, optional `description`, and original-resolution geometry. Box geometry is `x`, `y`, `width`, `height`; line is `x1`, `y1`, `x2`, `y2`; point is `x`, `y`; polyline and polygon use `points: [{x, y}, ...]`. A polyline is open and does not append a closing vertex automatically. Full Dataset contains an `images` array. Current Image keeps the earlier `{image, annotations}` structure. `filename` refers to the packaged image; `original_filename` preserves the upload name.
 
 Descriptions are retained in VGG, CSV, and Boundless JSON; YOLO, VOC, and COCO do not represent them in these exports. The ZIP is an annotation handoff, not a reopenable Boundless project: images and edits remain in the current browser page until it closes or refreshes.
+
+## Polyline validation
+
+With Playwright installed for development, serve the repository using `python3 -m http.server 8765`, then run `node tests/polyline.cjs`. Set `CHROME_PATH` to use a specific Chromium binary, or `TEST_URL` for a different local server. No test dependencies are loaded by the website. The test covers mouse and touch creation, minimum vertices, Enter/button completion, cancel, pan continuity, move/vertex edit and undo, legacy line compatibility, image isolation, original coordinates at different sizes, format-specific exports, CVAT XML parsing and shape/filename mappings, and scope-aware partial-export confirmation. A test-only intercepted copy of the app exposes state for assertions; production code contains no test hook.
