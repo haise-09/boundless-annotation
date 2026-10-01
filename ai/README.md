@@ -7,7 +7,7 @@ This feature branch adds optional, human-reviewed suggestions to the existing st
 Open the Netlify deploy preview, or serve the repository with `python3 -m http.server 8000` and open `http://localhost:8000`. No build step or application server is required. Opening `index.html` directly still supports manual annotation; AI modules require HTTP/HTTPS.
 
 1. Add images as usual.
-2. **Auto Annotate (Boxes)** loads RT-DETR and detects common objects in the active image. Confirm the initial model download. Adjust Detection Confidence and check/uncheck individual suggestions. Click **Accept Selected** to add checked, shown boxes. Hidden suggestions are never accepted. These generic labels may need renaming for your dataset.
+2. **Smart Annotate** loads RT-DETR and detects common objects in the active image. Confirm the initial model download. Adjust Detection Confidence and check/uncheck individual suggestions. Click **Accept Selected** to add checked, shown boxes. Hidden suggestions are never accepted. These generic labels may need renaming for your dataset.
 3. Dashed purple boxes with labels and confidence scores are previews, excluded from exports. Accepted shapes use the existing selection, edit, delete, and export tools. An accepted batch is one Undo step.
 4. **Cancel AI** terminates the worker and discards the unfinished preview. Switching/removing the active image also discards its unaccepted preview and cancels in-flight work. Accepted shapes remain attached to their image. Pan/zoom can be used while inspecting a preview.
 
@@ -19,7 +19,7 @@ AI polygon selection was removed after user testing. The manual Polygon tool and
 - A suggestion is marked **Likely Duplicate** when an accepted box has the same label (case-insensitive) and intersection-over-union of at least 0.8. Such suggestions start unchecked. This is a heuristic, not a guarantee that objects match. Different labels are not suppressed.
 - **Accept Selected** adds only checked suggestions above the confidence threshold. Check a likely duplicate explicitly if you want to keep it.
 - Confidence filtering only hides pending suggestions; it never alters accepted annotations. Checkbox choices persist while filtering. Duplicate status is recomputed against current annotations after edits/undo.
-- The panel keeps only Auto Annotate, confidence, individual suggestion checkboxes, Accept Selected, and Cancel/Clear Preview. A short summary reports shown suggestions and selections. Model-label lists, class filters, bulk buttons, and the long explanation paragraph are omitted to keep the workflow compact.
+- The panel keeps only Smart Annotate, confidence, individual suggestion checkboxes, Accept Selected, and Cancel/Clear Preview. A short summary reports shown suggestions and selections. Model-label lists, class filters, bulk buttons, and the long explanation paragraph are omitted to keep the workflow compact.
 - Loading is indeterminate overall, with per-file download percentages and a local detection message. Cancel stops computation by terminating the worker (the next run recreates it). Model errors allow retry and never disable manual annotation.
 
 ## Models and privacy

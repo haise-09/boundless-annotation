@@ -4,7 +4,7 @@
 
 ## AI assistance preview
 
-This branch adds optional **Auto Annotate (Boxes)** with local browser inference and human review. It includes the stable v1.4.0 polyline/CVAT tools. AI is not yet merged into production.
+This branch adds optional **Smart Annotate** with local browser inference and human review. It includes the stable v1.4.0 polyline/CVAT tools. AI is not yet merged into production.
 
 - Review dashed, labeled suggestions before accepting. Adjust confidence, check individual suggestions, then **Accept Selected**. A compact count shows suggestions and selections.
 - Re-running replaces only the pending preview. Likely duplicates of accepted boxes (same label, intersection-over-union at least 80%) start unchecked. Explicit selection can override this; existing annotations are never replaced.

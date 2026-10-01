@@ -63,7 +63,7 @@ export function createAIController(bridge){
   }
   function render(){
     const image=bridge.active();
-    if(imageId!==image?.id){if(job){worker?.terminate();worker=null;job=null;serial++;}imageId=image?.id;suggestions=[];say('Choose Auto Annotate to suggest boxes.');}
+    if(imageId!==image?.id){if(job){worker?.terminate();worker=null;job=null;serial++;}imageId=image?.id;suggestions=[];say('Choose Smart Annotate to suggest boxes.');}
     $('ai-detect').disabled=!image||!!job;
     $('ai-threshold').disabled=!image||!!job;
     $('ai-cancel').disabled=!image||!(job||suggestions.length);
