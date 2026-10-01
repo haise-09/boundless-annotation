@@ -10,3 +10,9 @@
 
 /* Pointer guide follows the displayed image and never intercepts drawing or editing. */
 .crosshair{position:absolute;inset:0;pointer-events:none;z-index:5;overflow:hidden;--guide-x:0px;--guide-y:0px}.crosshair[hidden]{display:none}.crosshair-horizontal,.crosshair-vertical{position:absolute;display:block;background:#eaf4ffbb;box-shadow:0 0 2px #09131d,0 0 6px #09131d}.crosshair-horizontal{left:0;right:0;top:var(--guide-y);height:1px}.crosshair-vertical{top:0;bottom:0;left:var(--guide-x);width:1px}.crosshair-dot{position:absolute;left:var(--guide-x);top:var(--guide-y);width:7px;height:7px;transform:translate(-50%,-50%);border:1px solid #152239;border-radius:50%;background:#fff;box-shadow:0 0 0 1px #eaf4ff}.crosshair-coordinates{position:absolute;left:var(--guide-x);top:var(--guide-y);transform:translate(12px,12px);padding:5px 7px;border:1px solid #94bad9;border-radius:5px;background:#14253cee;color:#f4f8ff;box-shadow:0 3px 10px #0009;font:600 11px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:nowrap}.crosshair.flip-x .crosshair-coordinates{transform:translate(calc(-100% - 12px),12px)}.crosshair.flip-y .crosshair-coordinates{transform:translate(12px,calc(-100% - 12px))}.crosshair.flip-x.flip-y .crosshair-coordinates{transform:translate(calc(-100% - 12px),calc(-100% - 12px))}
+
+/* Open paths share polygon vertex editing but never fill or close their outline. */
+.annotation-polyline{fill:none;stroke:#ffcd59;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke;pointer-events:stroke}
+.annotation-polyline.selected{stroke:#65eeff;stroke-width:4;filter:drop-shadow(0 0 4px #65eeff)}
+.polyline-hit{fill:none;stroke:transparent;stroke-width:14;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke;pointer-events:stroke}
+#finish-polyline:not(:disabled){border-color:#80a6ff;color:#bcd0ff}.tool-selector button[hidden]{display:none}
