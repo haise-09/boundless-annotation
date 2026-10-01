@@ -4,7 +4,7 @@
 
 ## AI assistance preview
 
-This branch adds **Auto Annotate (Boxes)** and **Auto Select (Polygon)** with local browser inference and human review. Accept suggestions to use the existing edit, undo and export controls. Models download only after opting in; images and annotations remain on your device. Manual annotation remains available if AI cannot load. Read [the AI preview guide](ai/README.md) for usage, model downloads, modular architecture, testing and limitations. This prototype is intended for a Netlify deploy preview before merging into production.
+This branch adds **Auto Annotate (Boxes)** with local browser inference and human review. Accept suggestions to use the existing edit, undo and export controls. Models download only after opting in; images and annotations remain on your device. Manual annotation remains available if AI cannot load. Read [the AI preview guide](ai/README.md) for usage, model downloads, modular architecture, testing and limitations. AI polygon selection has been removed from this preview; the manual Polygon tool and existing polygon annotations are unchanged. This prototype is intended for a Netlify deploy preview before merging into production.
 
 ## Version 1.3.2 additions
 

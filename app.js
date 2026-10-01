@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const $=id=>document.getElementById(id);
-  const ui=Object.fromEntries(['file','export-dialog','export-form','export-name','export-details','include-images','include-map','split-dataset','split-choice','cancel-export','confirm-export','export-menu','json','json-current','yolo','yolo-all','voc-current','voc-all','coco','vgg','csv','undo','clear','reset','drop','empty','image-wrap','image','overlay','crosshair','crosshair-coordinates','meta','status','classes','class-count','annotations','count','label-input','description-input','rename','delete','label-dialog','label-form','cancel-label','new-label','new-description','image-count','image-list','previous','next','position','tool-smart','tool-select','tool-pan','tool-box','tool-line','tool-point','tool-polygon','finish-polygon','zoom-in','zoom-out','zoom-fit','zoom-level'].map(id=>[id,$(id)]));
+  const ui=Object.fromEntries(['file','export-dialog','export-form','export-name','export-details','include-images','include-map','split-dataset','split-choice','cancel-export','confirm-export','export-menu','json','json-current','yolo','yolo-all','voc-current','voc-all','coco','vgg','csv','undo','clear','reset','drop','empty','image-wrap','image','overlay','crosshair','crosshair-coordinates','meta','status','classes','class-count','annotations','count','label-input','description-input','rename','delete','label-dialog','label-form','cancel-label','new-label','new-description','image-count','image-list','previous','next','position','tool-select','tool-pan','tool-box','tool-line','tool-point','tool-polygon','finish-polygon','zoom-in','zoom-out','zoom-fit','zoom-level'].map(id=>[id,$(id)]));
   const project={images:[]};
   let ai=null;
   let activeId=null,draft=null,polygonDraft=null,pending=null,editDraft=null,panDraft=null,lastLabel='',session=0,tool='box',spacePan=false,lastPointer=null;
@@ -22,12 +22,12 @@
   function lineElement(b,selected=false){const line=document.createElementNS(svgNS,'line');line.classList.add('annotation-line');if(selected)line.classList.add('selected');for(const key of ['x1','y1','x2','y2'])line.setAttribute(key,b[key]);return line;}
   const coords=b=>b.type==='polygon'?`${b.points.length} vertices: ${b.points.map(p=>`(${p.x}, ${p.y})`).join(' ')}`:b.type==='line'?`(${b.x1}, ${b.y1}) → (${b.x2}, ${b.y2})`:b.type==='point'?`x: ${b.x}  y: ${b.y}`:`x: ${b.x}  y: ${b.y}  w: ${b.width}  h: ${b.height}`;
   const effectiveTool=()=>spacePan?'pan':tool;
-  const toolMessage={smart:'Auto Select: click inside the object, then use Include or Exclude clicks to refine. Review and label the preview.',select:'Select a shape to move it. Drag its handles to edit it.',pan:'Pan: drag the image to move around. Hold Space to pan temporarily.',box:'Box: drag on the image to draw. Esc cancels a drawing.',line:'Line: drag from start to end. Esc cancels a drawing.',point:'Point: click on the image to mark a location.',polygon:'Polygon: click three or more vertices, then click the first vertex, Finish polygon, or press Enter. Esc cancels.'};
+  const toolMessage={select:'Select a shape to move it. Drag its handles to edit it.',pan:'Pan: drag the image to move around. Hold Space to pan temporarily.',box:'Box: drag on the image to draw. Esc cancels a drawing.',line:'Line: drag from start to end. Esc cancels a drawing.',point:'Point: click on the image to mark a location.',polygon:'Polygon: click three or more vertices, then click the first vertex, Finish polygon, or press Enter. Esc cancels.'};
   function hideCrosshair(){ui.crosshair.hidden=true;}
   function updateCrosshair(e){lastPointer={x:e.clientX,y:e.clientY};const image=active();if(!image||effectiveTool()==='pan'||ui['label-dialog'].open){hideCrosshair();return;}const r=ui.overlay.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;if(x<0||y<0||x>r.width||y>r.height){hideCrosshair();return;}const p=point(e);ui.crosshair.style.setProperty('--guide-x',`${x}px`);ui.crosshair.style.setProperty('--guide-y',`${y}px`);ui.crosshair.classList.toggle('flip-x',x>r.width/2);ui.crosshair.classList.toggle('flip-y',y>r.height/2);ui['crosshair-coordinates'].textContent=`x: ${Math.round(p.x)}  y: ${Math.round(p.y)}`;ui.crosshair.hidden=false;}
-  function showTool(){const current=effectiveTool();for(const name of ['select','pan','box','line','point','polygon','smart'])ui[`tool-${name}`].setAttribute('aria-pressed',String(current===name));ui.overlay.classList.toggle('select-mode',current==='select');ui.overlay.classList.toggle('pan-mode',current==='pan');if(current==='pan')hideCrosshair();else if(lastPointer)updateCrosshair({clientX:lastPointer.x,clientY:lastPointer.y});status(toolMessage[current]);}
+  function showTool(){const current=effectiveTool();for(const name of ['select','pan','box','line','point','polygon'])ui[`tool-${name}`].setAttribute('aria-pressed',String(current===name));ui.overlay.classList.toggle('select-mode',current==='select');ui.overlay.classList.toggle('pan-mode',current==='pan');if(current==='pan')hideCrosshair();else if(lastPointer)updateCrosshair({clientX:lastPointer.x,clientY:lastPointer.y});status(toolMessage[current]);}
   function chooseTool(next){if(next===tool)return;if(next==='pan'&&tool==='polygon'||next==='polygon'&&tool==='pan'&&polygonDraft){cancelDraft(true);}else closeDrawing();tool=next;if(polygonDraft)polygonDraft.cursor=null;render();showTool();}
-  for(const name of ['select','pan','box','line','point','polygon','smart'])ui[`tool-${name}`].addEventListener('click',()=>chooseTool(name));
+  for(const name of ['select','pan','box','line','point','polygon'])ui[`tool-${name}`].addEventListener('click',()=>chooseTool(name));
   function fitWidth(image){return Math.min(image.width,ui.drop.clientWidth-2,Math.max(100,window.innerHeight*.7)*image.width/image.height);}
   function updateZoom(){const image=active();ui['zoom-level'].textContent=image?`${Math.round((image.zoom||1)*100)}%`:'100%';for(const id of ['zoom-in','zoom-out','zoom-fit'])ui[id].disabled=!image;if(image){ui['image-wrap'].style.width=`${fitWidth(image)*(image.zoom||1)}px`;}}
   function zoomTo(value){hideCrosshair();lastPointer=null;const image=active();if(!image)return;const oldWidth=ui['image-wrap'].getBoundingClientRect().width,centerX=ui.drop.scrollLeft+ui.drop.clientWidth/2,centerY=ui.drop.scrollTop+ui.drop.clientHeight/2;image.zoom=clamp(value,.25,8);updateZoom();const ratio=ui['image-wrap'].getBoundingClientRect().width/oldWidth;if(Number.isFinite(ratio)){ui.drop.scrollLeft=centerX*ratio-ui.drop.clientWidth/2;ui.drop.scrollTop=centerY*ratio-ui.drop.clientHeight/2;}}
@@ -183,7 +183,6 @@
   }
   function requestLabel(type,shape){hideCrosshair();pending={imageId:activeId,type,shape};ui['new-label'].value=lastLabel;ui['new-description'].value='';ui['label-dialog'].showModal();ui['new-label'].focus();ui['new-label'].select();}
   ui.overlay.addEventListener('pointerdown',e=>{if(!active()||pending||e.button!==0||effectiveTool()==='select')return;e.preventDefault();if(effectiveTool()==='pan'){panDraft={pointer:e.pointerId,x:e.clientX,y:e.clientY,left:ui.drop.scrollLeft,top:ui.drop.scrollTop};ui.overlay.setPointerCapture(e.pointerId);ui.overlay.classList.add('panning');return;}const start=point(e);
-    if(effectiveTool()==='smart'){ai?.click(start);return;}
     if(effectiveTool()==='polygon'){addPolygonVertex(start);return;}
     if(effectiveTool()==='point'){requestLabel('point',{x:Math.round(start.x),y:Math.round(start.y)});return;}
     draft={pointer:e.pointerId,start,end:start,imageId:activeId,type:effectiveTool()};ui.overlay.setPointerCapture(e.pointerId);drawDraft();});
@@ -221,7 +220,7 @@
     if((e.ctrlKey||e.metaKey)&&!e.altKey&&key==='z'){e.preventDefault();ui.undo.click();return;}
     if(e.ctrlKey||e.metaKey||e.altKey)return;
     if(e.code==='Space'){e.preventDefault();if(!e.repeat&&!spacePan){cancelDraft(true);if(polygonDraft){polygonDraft.cursor=null;drawPolygonDraft();}spacePan=true;showTool();}return;}
-    if(key==='escape'){cancelDraft();if(effectiveTool()==='smart')ai?.cancel();return;}
+    if(key==='escape'){cancelDraft();return;}
     if(key==='enter'&&polygonDraft&&effectiveTool()==='polygon'&&!e.target.closest?.('button,a,[role="button"]')){e.preventDefault();finishPolygon();return;}
     if(key==='delete'||key==='backspace'){e.preventDefault();removeSelected();return;}
     const shortcuts={'1':'select','2':'box','3':'line','4':'point','5':'polygon',h:'pan'};
@@ -398,7 +397,7 @@
     finally{exportBusy=false;ui['confirm-export'].disabled=false;}
   });
   ui['export-name'].addEventListener('input',()=>ui['export-name'].setCustomValidity(''));
-  import('./ai/controller.js').then(({createAIController})=>{ai=createAIController({active,lastLabel:()=>lastLabel,chooseTool,tool:effectiveTool,
+  import('./ai/controller.js').then(({createAIController})=>{ai=createAIController({active,chooseTool,
     commit(imageId,shapes){const image=project.images.find(item=>item.id===imageId);if(!image)return;
       const before=snapshot(image);for(const shape of shapes)image.annotations.push({...shape,id:image.nextId++});
       image.selected=image.annotations.at(-1)?.id;lastLabel=shapes.at(-1)?.label||lastLabel;recordUndo(image,before);render();
