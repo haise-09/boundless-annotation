@@ -1,9 +1,9 @@
 (() => {
   'use strict';
   const $=id=>document.getElementById(id);
-  const ui=Object.fromEntries(['file','export-dialog','export-form','export-name','export-details','include-images','include-map','split-dataset','split-choice','cancel-export','confirm-export','export-menu','json','json-current','yolo','yolo-all','voc-current','voc-all','coco','vgg','csv','undo','clear','reset','drop','empty','image-wrap','image','overlay','crosshair','crosshair-coordinates','meta','status','classes','class-count','annotations','count','label-input','description-input','rename','delete','label-dialog','label-form','cancel-label','new-label','new-description','image-count','image-list','previous','next','position','tool-select','tool-pan','tool-box','tool-line','tool-point','tool-polygon','finish-polygon','zoom-in','zoom-out','zoom-fit','zoom-level'].map(id=>[id,$(id)]));
+  const ui=Object.fromEntries(['file','export-dialog','export-form','export-name','export-details','export-compatibility','export-warning','export-skipped','allow-partial','include-images','include-map','split-dataset','split-choice','cancel-export','confirm-export','export-menu','json','json-current','yolo','yolo-all','voc-current','voc-all','cvat-current','cvat-all','coco','vgg','csv','undo','clear','reset','drop','empty','image-wrap','image','overlay','crosshair','crosshair-coordinates','meta','status','classes','class-count','annotations','count','label-input','description-input','rename','delete','label-dialog','label-form','cancel-label','new-label','new-description','image-count','image-list','previous','next','position','tool-select','tool-pan','tool-box','tool-polyline','tool-point','tool-polygon','finish-polygon','finish-polyline','zoom-in','zoom-out','zoom-fit','zoom-level'].map(id=>[id,$(id)]));
   const project={images:[]};
-  let activeId=null,draft=null,polygonDraft=null,pending=null,editDraft=null,panDraft=null,lastLabel='',session=0,tool='box',spacePan=false,lastPointer=null;
+  let activeId=null,draft=null,pathDraft=null,pending=null,editDraft=null,panDraft=null,lastLabel='',session=0,tool='box',spacePan=false,lastPointer=null;
   const active=()=>project.images.find(item=>item.id===activeId)||null;
   const boxes=()=>active()?.annotations||[];
   const snapshot=image=>({annotations:structuredClone(image.annotations),selected:image.selected,nextId:image.nextId});
@@ -19,27 +19,36 @@
   const svgNS='http://www.w3.org/2000/svg';
   function lineLayer(image){const svg=document.createElementNS(svgNS,'svg');svg.classList.add('annotation-line-layer');svg.setAttribute('viewBox',`0 0 ${image.width} ${image.height}`);svg.setAttribute('preserveAspectRatio','none');return svg;}
   function lineElement(b,selected=false){const line=document.createElementNS(svgNS,'line');line.classList.add('annotation-line');if(selected)line.classList.add('selected');for(const key of ['x1','y1','x2','y2'])line.setAttribute(key,b[key]);return line;}
-  const coords=b=>b.type==='polygon'?`${b.points.length} vertices: ${b.points.map(p=>`(${p.x}, ${p.y})`).join(' ')}`:b.type==='line'?`(${b.x1}, ${b.y1}) → (${b.x2}, ${b.y2})`:b.type==='point'?`x: ${b.x}  y: ${b.y}`:`x: ${b.x}  y: ${b.y}  w: ${b.width}  h: ${b.height}`;
+  const coords=b=>['polygon','polyline'].includes(b.type)?`${b.points.length} vertices: ${b.points.map(p=>`(${p.x}, ${p.y})`).join(' ')}`:b.type==='line'?`(${b.x1}, ${b.y1}) → (${b.x2}, ${b.y2})`:b.type==='point'?`x: ${b.x}  y: ${b.y}`:`x: ${b.x}  y: ${b.y}  w: ${b.width}  h: ${b.height}`;
   const effectiveTool=()=>spacePan?'pan':tool;
-  const toolMessage={select:'Select a shape to move it. Drag its handles to edit it.',pan:'Pan: drag the image to move around. Hold Space to pan temporarily.',box:'Box: drag on the image to draw. Esc cancels a drawing.',line:'Line: drag from start to end. Esc cancels a drawing.',point:'Point: click on the image to mark a location.',polygon:'Polygon: click three or more vertices, then click the first vertex, Finish polygon, or press Enter. Esc cancels.'};
+  const toolMessage={select:'Select a shape to move it. Drag its handles to edit it.',pan:'Pan: drag the image to move around. Hold Space to pan temporarily.',box:'Box: drag on the image to draw. Esc cancels a drawing.',polyline:'Polyline: click two or more vertices, then Finish Polyline or Enter. The path stays open. Esc cancels.',point:'Point: click on the image to mark a location.',polygon:'Polygon: click three or more vertices, then click the first vertex, Finish Polygon, or press Enter. Esc cancels.'};
   function hideCrosshair(){ui.crosshair.hidden=true;}
   function updateCrosshair(e){lastPointer={x:e.clientX,y:e.clientY};const image=active();if(!image||effectiveTool()==='pan'||ui['label-dialog'].open){hideCrosshair();return;}const r=ui.overlay.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;if(x<0||y<0||x>r.width||y>r.height){hideCrosshair();return;}const p=point(e);ui.crosshair.style.setProperty('--guide-x',`${x}px`);ui.crosshair.style.setProperty('--guide-y',`${y}px`);ui.crosshair.classList.toggle('flip-x',x>r.width/2);ui.crosshair.classList.toggle('flip-y',y>r.height/2);ui['crosshair-coordinates'].textContent=`x: ${Math.round(p.x)}  y: ${Math.round(p.y)}`;ui.crosshair.hidden=false;}
-  function showTool(){const current=effectiveTool();for(const name of ['select','pan','box','line','point','polygon'])ui[`tool-${name}`].setAttribute('aria-pressed',String(current===name));ui.overlay.classList.toggle('select-mode',current==='select');ui.overlay.classList.toggle('pan-mode',current==='pan');if(current==='pan')hideCrosshair();else if(lastPointer)updateCrosshair({clientX:lastPointer.x,clientY:lastPointer.y});status(toolMessage[current]);}
-  function chooseTool(next){if(next===tool)return;if(next==='pan'&&tool==='polygon'||next==='polygon'&&tool==='pan'&&polygonDraft){cancelDraft(true);}else closeDrawing();tool=next;if(polygonDraft){polygonDraft.cursor=null;drawPolygonDraft();}showTool();}
-  for(const name of ['select','pan','box','line','point','polygon'])ui[`tool-${name}`].addEventListener('click',()=>chooseTool(name));
+  function showTool(){const current=effectiveTool();for(const name of ['select','pan','box','polyline','point','polygon'])ui[`tool-${name}`].setAttribute('aria-pressed',String(current===name));ui.overlay.classList.toggle('select-mode',current==='select');ui.overlay.classList.toggle('pan-mode',current==='pan');if(current==='pan')hideCrosshair();else if(lastPointer)updateCrosshair({clientX:lastPointer.x,clientY:lastPointer.y});status(toolMessage[current]);updateFinishControls();}
+  function chooseTool(next){if(next===tool)return;
+    const keepPath=pathDraft&&(next==='pan'||tool==='pan'&&next===pathDraft.type);
+    if(keepPath)cancelDraft(true);else closeDrawing();
+    tool=next;if(pathDraft)pathDraft.cursor=null;render();showTool();
+  }
+  function updateFinishControls(){
+    const kind=pathDraft?.type||tool,isPolyline=kind==='polyline';
+    ui['finish-polyline'].hidden=!isPolyline;ui['finish-polygon'].hidden=isPolyline;
+    for(const type of ['polygon','polyline'])ui[`finish-${type}`].disabled=!pathDraft||pathDraft.type!==type||effectiveTool()!==type||pathDraft.points.length<(type==='polygon'?3:2);
+  }
+  for(const name of ['select','pan','box','polyline','point','polygon'])ui[`tool-${name}`].addEventListener('click',()=>chooseTool(name));
   function fitWidth(image){return Math.min(image.width,ui.drop.clientWidth-2,Math.max(100,window.innerHeight*.7)*image.width/image.height);}
   function updateZoom(){const image=active();ui['zoom-level'].textContent=image?`${Math.round((image.zoom||1)*100)}%`:'100%';for(const id of ['zoom-in','zoom-out','zoom-fit'])ui[id].disabled=!image;if(image){ui['image-wrap'].style.width=`${fitWidth(image)*(image.zoom||1)}px`;}}
   function zoomTo(value){hideCrosshair();lastPointer=null;const image=active();if(!image)return;const oldWidth=ui['image-wrap'].getBoundingClientRect().width,centerX=ui.drop.scrollLeft+ui.drop.clientWidth/2,centerY=ui.drop.scrollTop+ui.drop.clientHeight/2;image.zoom=clamp(value,.25,8);updateZoom();const ratio=ui['image-wrap'].getBoundingClientRect().width/oldWidth;if(Number.isFinite(ratio)){ui.drop.scrollLeft=centerX*ratio-ui.drop.clientWidth/2;ui.drop.scrollTop=centerY*ratio-ui.drop.clientHeight/2;}}
   ui['zoom-in'].addEventListener('click',()=>zoomTo((active()?.zoom||1)*1.25));ui['zoom-out'].addEventListener('click',()=>zoomTo((active()?.zoom||1)/1.25));ui['zoom-fit'].addEventListener('click',()=>{zoomTo(1);ui.drop.scrollTo(0,0);});
   new ResizeObserver(updateZoom).observe(ui.drop);
-  function bindShape(element,image,b){element.addEventListener('pointerdown',e=>{if(tool!=='select'||e.button!==0)return;e.preventDefault();e.stopPropagation();if(image.selected!==b.id){image.selected=b.id;render();}startEdit(e,image,b,'move');});element.addEventListener('click',e=>{if(effectiveTool()==='select')e.stopPropagation();});}
-  function addVertex(svg,image,b,part,x,y){const handle=document.createElementNS(svgNS,'circle');handle.classList.add('edit-vertex');handle.setAttribute('cx',x);handle.setAttribute('cy',y);handle.setAttribute('r',Math.max(6,9*image.width/ui.overlay.clientWidth));handle.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();startEdit(e,image,b,part);});svg.append(handle);}
+  function bindShape(element,image,b){element.addEventListener('pointerdown',e=>{if(effectiveTool()!=='select'||e.button!==0)return;e.preventDefault();e.stopPropagation();if(image.selected!==b.id){image.selected=b.id;render();}startEdit(e,image,b,'move');});element.addEventListener('click',e=>{if(effectiveTool()==='select')e.stopPropagation();});}
+  function addVertex(svg,image,b,part,x,y){const handle=document.createElementNS(svgNS,'circle');handle.classList.add('edit-vertex');handle.setAttribute('cx',x);handle.setAttribute('cy',y);handle.setAttribute('r',Math.max(6,9*image.width/ui.overlay.clientWidth));handle.addEventListener('pointerdown',e=>{if(effectiveTool()!=='select'||e.button!==0)return;e.preventDefault();e.stopPropagation();startEdit(e,image,b,part);});svg.append(handle);}
   function startEdit(e,image,b,part){editDraft={pointer:e.pointerId,imageId:image.id,annotation:b,original:structuredClone(b),before:snapshot(image),part,start:point(e)};ui.overlay.setPointerCapture(e.pointerId);}
   function moveEdit(e){const edit=editDraft,image=active();if(!edit||e.pointerId!==edit.pointer||image?.id!==edit.imageId)return;const p=point(e),b=edit.annotation,o=edit.original,dx=Math.round(p.x-edit.start.x),dy=Math.round(p.y-edit.start.y),part=edit.part;
     if(part==='move'){if((b.type||'box')==='box'){b.x=clamp(o.x+dx,0,image.width-o.width);b.y=clamp(o.y+dy,0,image.height-o.height);}else if(b.type==='point'){b.x=clamp(o.x+dx,0,image.width);b.y=clamp(o.y+dy,0,image.height);}else{const vertices=b.type==='line'?[{x:o.x1,y:o.y1},{x:o.x2,y:o.y2}]:o.points;const minX=Math.min(...vertices.map(v=>v.x)),maxX=Math.max(...vertices.map(v=>v.x)),minY=Math.min(...vertices.map(v=>v.y)),maxY=Math.max(...vertices.map(v=>v.y));const shiftX=clamp(dx,-minX,image.width-maxX),shiftY=clamp(dy,-minY,image.height-maxY);if(b.type==='line'){b.x1=o.x1+shiftX;b.x2=o.x2+shiftX;b.y1=o.y1+shiftY;b.y2=o.y2+shiftY;}else b.points=o.points.map(v=>({x:v.x+shiftX,y:v.y+shiftY}));}}
     else if(b.type==='box'){const right=o.x+o.width,bottom=o.y+o.height;const left=part.includes('w')?clamp(Math.round(p.x),0,right-1):o.x,top=part.includes('n')?clamp(Math.round(p.y),0,bottom-1):o.y;b.x=left;b.y=top;b.width=(part.includes('e')?clamp(Math.round(p.x),o.x+1,image.width):right)-left;b.height=(part.includes('s')?clamp(Math.round(p.y),o.y+1,image.height):bottom)-top;}
     else if(b.type==='line'){const k=part==='line-start'?'1':'2';b[`x${k}`]=Math.round(p.x);b[`y${k}`]=Math.round(p.y);}
-    else if(b.type==='polygon'&&part.startsWith('vertex-'))b.points[Number(part.slice(7))]={x:Math.round(p.x),y:Math.round(p.y)};
+    else if(['polygon','polyline'].includes(b.type)&&part.startsWith('vertex-'))b.points[Number(part.slice(7))]={x:Math.round(p.x),y:Math.round(p.y)};
     render();
   }
   function render(){
@@ -54,8 +63,8 @@
     ui.count.textContent=`${annotations.length} ${annotations.length===1?'annotation':'annotations'}`;
     ui['image-count'].textContent=`${project.images.length} ${project.images.length===1?'image':'images'}`;
     const hasDataset=!!project.images.length;
-    ui.json.disabled=ui['yolo-all'].disabled=ui['voc-all'].disabled=ui.coco.disabled=ui.vgg.disabled=ui.csv.disabled=ui.reset.disabled=!hasDataset;
-    ui['json-current'].disabled=ui.yolo.disabled=ui['voc-current'].disabled=!image;
+    ui.json.disabled=ui['yolo-all'].disabled=ui['voc-all'].disabled=ui['cvat-all'].disabled=ui.coco.disabled=ui.vgg.disabled=ui.csv.disabled=ui.reset.disabled=!hasDataset;
+    ui['json-current'].disabled=ui.yolo.disabled=ui['voc-current'].disabled=ui['cvat-current'].disabled=!image;
     ui['export-menu'].querySelector('.export-trigger').setAttribute('aria-disabled',String(!hasDataset));
     ui['export-menu'].querySelector('.export-trigger').tabIndex=hasDataset?0:-1;
     if(!hasDataset)ui['export-menu'].open=false;
@@ -82,8 +91,9 @@
           const line=lineElement(b,isSelected);bindShape(line,image,b);svg.append(line);if(isSelected&&effectiveTool()==='select')for(const key of ['1','2'])addVertex(svg,image,b,key==='1'?'line-start':'line-end',b[`x${key}`],b[`y${key}`]);
           const label=document.createElement('div');label.className='line-label'+(isSelected?' selected':'');label.style.left=`${(b.x1+b.x2)/2/image.width*100}%`;label.style.top=`${(b.y1+b.y2)/2/image.height*100}%`;
           const tag=document.createElement('span');tag.className='tag';tag.textContent=b.label;label.append(tag);ui.overlay.append(label);
-        }else if(type==='polygon'){
-          const shape=document.createElementNS(svgNS,'polygon');shape.classList.add('annotation-polygon');if(isSelected)shape.classList.add('selected');shape.setAttribute('points',b.points.map(p=>`${p.x},${p.y}`).join(' '));
+        }else if(type==='polygon'||type==='polyline'){
+          const shape=document.createElementNS(svgNS,type);shape.classList.add(type==='polygon'?'annotation-polygon':'annotation-polyline');if(isSelected)shape.classList.add('selected');shape.setAttribute('points',b.points.map(p=>`${p.x},${p.y}`).join(' '));
+          if(type==='polyline'){const hit=shape.cloneNode();hit.setAttribute('class','polyline-hit');bindShape(hit,image,b);svg.append(hit);}
           bindShape(shape,image,b);svg.append(shape);if(isSelected&&effectiveTool()==='select')b.points.forEach((p,i)=>addVertex(svg,image,b,`vertex-${i}`,p.x,p.y));
           const center=b.points.reduce((sum,p)=>({x:sum.x+p.x,y:sum.y+p.y}),{x:0,y:0});
           const label=document.createElement('div');label.className='line-label'+(isSelected?' selected':'');label.style.left=`${center.x/b.points.length/image.width*100}%`;label.style.top=`${center.y/b.points.length/image.height*100}%`;
@@ -93,7 +103,7 @@
           el.style.left=`${b.x/image.width*100}%`;el.style.top=`${b.y/image.height*100}%`;
           if(type==='box'){el.style.width=`${b.width/image.width*100}%`;el.style.height=`${b.height/image.height*100}%`;}
           const tag=document.createElement('span');tag.className='tag';tag.textContent=b.label;el.append(tag);
-          bindShape(el,image,b);ui.overlay.append(el);if(type==='box'&&isSelected&&effectiveTool()==='select')for(const corner of ['nw','ne','sw','se']){const handle=document.createElement('span');handle.className=`resize-handle ${corner}`;handle.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();startEdit(e,image,b,corner);});el.append(handle);}
+          bindShape(el,image,b);ui.overlay.append(el);if(type==='box'&&isSelected&&effectiveTool()==='select')for(const corner of ['nw','ne','sw','se']){const handle=document.createElement('span');handle.className=`resize-handle ${corner}`;handle.addEventListener('pointerdown',e=>{if(effectiveTool()!=='select'||e.button!==0)return;e.preventDefault();e.stopPropagation();startEdit(e,image,b,corner);});el.append(handle);}
         }
       }
     }
@@ -111,9 +121,9 @@
     ui['class-count'].textContent=`${classes.length} ${classes.length===1?'class':'classes'}`;
     const current=annotations.find(b=>b.id===selected);ui['label-input'].disabled=ui['description-input'].disabled=ui.rename.disabled=ui.delete.disabled=!current;
     ui['label-input'].value=current?.label??'';ui['description-input'].value=current?.description??'';updateZoom();
-    if(polygonDraft)drawPolygonDraft();
+    if(pathDraft)drawPathDraft();updateFinishControls();
   }
-  function cancelDraft(keepPolygon=false){if(editDraft){Object.assign(editDraft.annotation,editDraft.original);editDraft=null;render();}panDraft=null;ui.overlay.classList.remove('panning');if(draft){try{ui.overlay.releasePointerCapture(draft.pointer);}catch{}draft=null;ui.overlay.querySelector('.draft')?.remove();}if(polygonDraft&&!keepPolygon){polygonDraft=null;ui.overlay.querySelector('.polygon-draft')?.remove();ui['finish-polygon'].disabled=true;}}
+  function cancelDraft(keepPath=false){if(editDraft){Object.assign(editDraft.annotation,editDraft.original);editDraft=null;render();}panDraft=null;ui.overlay.classList.remove('panning');if(draft){try{ui.overlay.releasePointerCapture(draft.pointer);}catch{}draft=null;ui.overlay.querySelector('.draft')?.remove();}if(pathDraft&&!keepPath){pathDraft=null;ui.overlay.querySelector('.polygon-draft')?.remove();}updateFinishControls();}
   function closeDrawing(){cancelDraft();pending=null;if(ui['label-dialog'].open)ui['label-dialog'].close('cancel');}
   function switchImage(id){if(id===activeId)return;closeDrawing();activeId=id;render();}
   function removeImage(id){const index=project.images.findIndex(item=>item.id===id);if(index<0)return;const item=project.images[index],n=item.annotations.length;
@@ -143,54 +153,55 @@
   ui.drop.addEventListener('drop',e=>{e.preventDefault();ui.drop.classList.remove('dragover');addImages(e.dataTransfer.files);});
   ui.previous.addEventListener('click',()=>{const i=project.images.findIndex(item=>item.id===activeId);if(i>0)switchImage(project.images[i-1].id);});
   ui.next.addEventListener('click',()=>{const i=project.images.findIndex(item=>item.id===activeId);if(i>=0&&i<project.images.length-1)switchImage(project.images[i+1].id);});
-  function drawPolygonDraft(){if(!polygonDraft||polygonDraft.imageId!==activeId)return;
+  function drawPathDraft(){if(!pathDraft||pathDraft.imageId!==activeId)return;
     ui.overlay.querySelector('.polygon-draft')?.remove();const svg=ui.overlay.querySelector('.annotation-line-layer');if(!svg)return;
     const group=document.createElementNS(svgNS,'g');group.classList.add('polygon-draft');
-    const points=[...polygonDraft.points,polygonDraft.cursor].filter(Boolean);
+    const points=[...pathDraft.points,pathDraft.cursor].filter(Boolean),image=active(),r=ui.overlay.getBoundingClientRect();
     if(points.length>1){const preview=document.createElementNS(svgNS,'polyline');preview.classList.add('polygon-preview');preview.setAttribute('points',points.map(p=>`${p.x},${p.y}`).join(' '));group.append(preview);}
-    for(const [index,p] of polygonDraft.points.entries()){const vertex=document.createElementNS(svgNS,'circle');vertex.classList.add('polygon-vertex');if(index===0&&polygonDraft.points.length>=3){vertex.classList.add('start-vertex');if(polygonDraft.cursor&&nearPolygonStart(polygonDraft.cursor))vertex.classList.add('near-start');}vertex.setAttribute('cx',p.x);vertex.setAttribute('cy',p.y);vertex.setAttribute('r',index===0&&polygonDraft.points.length>=3?Math.max(6,8*active().width/ui.overlay.getBoundingClientRect().width):5);group.append(vertex);}
-    svg.append(group);ui['finish-polygon'].disabled=polygonDraft.points.length<3;
-  }
-  function nearPolygonStart(p){if(!polygonDraft?.points.length)return false;const image=active(),r=ui.overlay.getBoundingClientRect(),first=polygonDraft.points[0];return Math.hypot((p.x-first.x)*r.width/image.width,(p.y-first.y)*r.height/image.height)<=12;}
-  function addPolygonVertex(p){const image=active();if(!image)return;
-    if(!polygonDraft)polygonDraft={imageId:activeId,points:[],cursor:null};
-    if(polygonDraft.points.length>=3&&nearPolygonStart(p)){finishPolygon();return;}
-    const r=ui.overlay.getBoundingClientRect(),last=polygonDraft.points.at(-1);
-    if(last&&Math.hypot((p.x-last.x)*r.width/image.width,(p.y-last.y)*r.height/image.height)<5)return;
-    polygonDraft.points.push({x:Math.round(p.x),y:Math.round(p.y)});polygonDraft.cursor=null;drawPolygonDraft();
-    status(`${polygonDraft.points.length} polygon ${polygonDraft.points.length===1?'vertex':'vertices'}. Add at least 3, then click the first vertex, Finish polygon, or press Enter.`);
-  }
-  function finishPolygon(){if(!polygonDraft||polygonDraft.points.length<3||polygonDraft.imageId!==activeId)return;
-    const image=active(),points=polygonDraft.points;
-    const area=Math.abs(points.reduce((total,p,i)=>total+p.x*points[(i+1)%points.length].y-p.y*points[(i+1)%points.length].x,0))/2;
-    const r=ui.overlay.getBoundingClientRect(),displayArea=area*r.width*r.height/(image.width*image.height);
-    if(displayArea<12){status('Polygon too small. Add vertices farther apart.');return;}
-    polygonDraft=null;ui.overlay.querySelector('.polygon-draft')?.remove();ui['finish-polygon'].disabled=true;
-    requestLabel('polygon',{points:points.map(p=>({...p}))});
-  }
-  ui['finish-polygon'].addEventListener('click',finishPolygon);
-  function drawDraft(){if(!draft)return;const image=active();
-    if(draft.type==='line'){
-      let el=ui.overlay.querySelector('.draft');if(!el){el=lineElement({x1:draft.start.x,y1:draft.start.y,x2:draft.end.x,y2:draft.end.y});el.classList.add('draft');ui.overlay.querySelector('.annotation-line-layer').append(el);}
-      el.setAttribute('x2',draft.end.x);el.setAttribute('y2',draft.end.y);return;
+    for(const [index,p] of pathDraft.points.entries()){
+      const vertex=document.createElementNS(svgNS,'circle'),canClose=pathDraft.type==='polygon'&&index===0&&pathDraft.points.length>=3;
+      vertex.classList.add('polygon-vertex');if(canClose){vertex.classList.add('start-vertex');if(pathDraft.cursor&&nearPolygonStart(pathDraft.cursor))vertex.classList.add('near-start');}
+      vertex.setAttribute('cx',p.x);vertex.setAttribute('cy',p.y);vertex.setAttribute('r',(canClose?8:5)*image.width/r.width);group.append(vertex);
     }
+    svg.append(group);updateFinishControls();
+  }
+  function nearPolygonStart(p){if(!pathDraft?.points.length)return false;const image=active(),r=ui.overlay.getBoundingClientRect(),first=pathDraft.points[0];return Math.hypot((p.x-first.x)*r.width/image.width,(p.y-first.y)*r.height/image.height)<=12;}
+  function addPathVertex(p){const image=active(),type=effectiveTool();if(!image)return;
+    if(!pathDraft)pathDraft={imageId:activeId,type,points:[],cursor:null};
+    if(type==='polygon'&&pathDraft.points.length>=3&&nearPolygonStart(p)){finishPath();return;}
+    const r=ui.overlay.getBoundingClientRect(),last=pathDraft.points.at(-1),next={x:Math.round(p.x),y:Math.round(p.y)};
+    if(last&&(last.x===next.x&&last.y===next.y||Math.hypot((p.x-last.x)*r.width/image.width,(p.y-last.y)*r.height/image.height)<5))return;
+    pathDraft.points.push(next);pathDraft.cursor=null;drawPathDraft();
+    status(`${pathDraft.points.length} ${type} ${pathDraft.points.length===1?'vertex':'vertices'}. ${type==='polygon'?'Add at least 3, then click the first vertex, Finish Polygon, or press Enter.':'Add at least 2, then Finish Polyline or press Enter. The path stays open.'}`);
+  }
+  function finishPath(){if(!pathDraft||pending||pathDraft.imageId!==activeId||effectiveTool()!==pathDraft.type)return;
+    const {type,points}=pathDraft,image=active();if(points.length<(type==='polygon'?3:2))return;
+    const r=ui.overlay.getBoundingClientRect();
+    if(type==='polygon'){
+      const area=Math.abs(points.reduce((total,p,i)=>total+p.x*points[(i+1)%points.length].y-p.y*points[(i+1)%points.length].x,0))/2;
+      if(area*r.width*r.height/(image.width*image.height)<12){status('Polygon too small. Add vertices farther apart.');return;}
+    }else{
+      const length=points.slice(1).reduce((sum,p,i)=>sum+Math.hypot((p.x-points[i].x)*r.width/image.width,(p.y-points[i].y)*r.height/image.height),0);
+      if(length<5){status('Polyline too short. Add vertices farther apart.');return;}
+    }
+    pathDraft=null;ui.overlay.querySelector('.polygon-draft')?.remove();updateFinishControls();
+    requestLabel(type,{points:points.map(p=>({...p}))});
+  }
+  ui['finish-polygon'].addEventListener('click',finishPath);
+  ui['finish-polyline'].addEventListener('click',finishPath);
+  function drawDraft(){if(!draft)return;const image=active();
     let el=ui.overlay.querySelector('.draft');if(!el){el=document.createElement('div');el.className='box draft';ui.overlay.append(el);}
     const x=Math.min(draft.start.x,draft.end.x),y=Math.min(draft.start.y,draft.end.y);
     el.style.left=`${x/image.width*100}%`;el.style.top=`${y/image.height*100}%`;
     el.style.width=`${Math.abs(draft.end.x-draft.start.x)/image.width*100}%`;el.style.height=`${Math.abs(draft.end.y-draft.start.y)/image.height*100}%`;
   }
   function requestLabel(type,shape){hideCrosshair();pending={imageId:activeId,type,shape};ui['new-label'].value=lastLabel;ui['new-description'].value='';ui['label-dialog'].showModal();ui['new-label'].focus();ui['new-label'].select();}
-  ui.overlay.addEventListener('pointerdown',e=>{if(!active()||pending||e.button!==0||effectiveTool()==='select')return;e.preventDefault();if(effectiveTool()==='pan'){panDraft={pointer:e.pointerId,x:e.clientX,y:e.clientY,left:ui.drop.scrollLeft,top:ui.drop.scrollTop};ui.overlay.setPointerCapture(e.pointerId);ui.overlay.classList.add('panning');return;}const start=point(e);
-    if(effectiveTool()==='polygon'){addPolygonVertex(start);return;}
+  ui.overlay.addEventListener('pointerdown',e=>{if(!active()||pending||e.button!==0||effectiveTool()==='select')return;e.preventDefault();ui.overlay.focus({preventScroll:true});if(effectiveTool()==='pan'){panDraft={pointer:e.pointerId,x:e.clientX,y:e.clientY,left:ui.drop.scrollLeft,top:ui.drop.scrollTop};ui.overlay.setPointerCapture(e.pointerId);ui.overlay.classList.add('panning');return;}const start=point(e);
+    if(['polygon','polyline'].includes(effectiveTool())){addPathVertex(start);return;}
     if(effectiveTool()==='point'){requestLabel('point',{x:Math.round(start.x),y:Math.round(start.y)});return;}
     draft={pointer:e.pointerId,start,end:start,imageId:activeId,type:effectiveTool()};ui.overlay.setPointerCapture(e.pointerId);drawDraft();});
-  ui.overlay.addEventListener('pointermove',e=>{updateCrosshair(e);if(editDraft){moveEdit(e);return;}if(panDraft&&e.pointerId===panDraft.pointer){ui.drop.scrollLeft=panDraft.left+panDraft.x-e.clientX;ui.drop.scrollTop=panDraft.top+panDraft.y-e.clientY;return;}if(draft&&e.pointerId===draft.pointer){draft.end=point(e);drawDraft();}else if(polygonDraft&&effectiveTool()==='polygon'){polygonDraft.cursor=point(e);drawPolygonDraft();}});
+  ui.overlay.addEventListener('pointermove',e=>{updateCrosshair(e);if(editDraft){moveEdit(e);return;}if(panDraft&&e.pointerId===panDraft.pointer){ui.drop.scrollLeft=panDraft.left+panDraft.x-e.clientX;ui.drop.scrollTop=panDraft.top+panDraft.y-e.clientY;return;}if(draft&&e.pointerId===draft.pointer){draft.end=point(e);drawDraft();}else if(pathDraft&&effectiveTool()===pathDraft.type){pathDraft.cursor=point(e);drawPathDraft();}});
   ui.overlay.addEventListener('pointerup',e=>{if(editDraft&&e.pointerId===editDraft.pointer){const edit=editDraft;editDraft=null;const image=active();if(image?.id===edit.imageId){recordUndo(image,edit.before);render();}return;}if(panDraft&&e.pointerId===panDraft.pointer){panDraft=null;ui.overlay.classList.remove('panning');return;}if(!draft||e.pointerId!==draft.pointer)return;const {start,imageId,type}=draft,end=point(e);cancelDraft();const image=active();if(!image||image.id!==imageId)return;
-    if(type==='line'){
-      const r=ui.overlay.getBoundingClientRect(),distance=Math.hypot((end.x-start.x)*r.width/image.width,(end.y-start.y)*r.height/image.height);
-      if(distance<5){status('Line too short. Drag at least a few pixels.');return;}
-      requestLabel('line',{x1:Math.round(start.x),y1:Math.round(start.y),x2:Math.round(end.x),y2:Math.round(end.y)});return;
-    }
     const raw={x:Math.min(start.x,end.x),y:Math.min(start.y,end.y),width:Math.abs(end.x-start.x),height:Math.abs(end.y-start.y)};
     if(raw.width<Math.max(3,image.width*.003)||raw.height<Math.max(3,image.height*.003)){status('Box too small. Drag a larger rectangle.');return;}
     requestLabel('box',rounded(raw));});
@@ -213,15 +224,15 @@
   const typingTarget=element=>!!element?.closest?.('input, textarea, select, [contenteditable="true"], [role="textbox"]');
   function releaseTemporaryPan(){if(!spacePan)return;spacePan=false;if(panDraft){try{ui.overlay.releasePointerCapture(panDraft.pointer);}catch{}panDraft=null;ui.overlay.classList.remove('panning');}showTool();}
   document.addEventListener('keydown',e=>{
-    if(e.isComposing||ui['label-dialog'].open||typingTarget(e.target)||e.target.closest?.('#export-menu'))return;
+    if(e.isComposing||ui['label-dialog'].open||ui['export-dialog'].open||typingTarget(e.target)||e.target.closest?.('#export-menu'))return;
     const key=e.key.toLowerCase();
     if((e.ctrlKey||e.metaKey)&&!e.altKey&&key==='z'){e.preventDefault();ui.undo.click();return;}
     if(e.ctrlKey||e.metaKey||e.altKey)return;
-    if(e.code==='Space'){e.preventDefault();if(!e.repeat&&!spacePan){cancelDraft(true);if(polygonDraft){polygonDraft.cursor=null;drawPolygonDraft();}spacePan=true;showTool();}return;}
+    if(e.code==='Space'){e.preventDefault();if(!e.repeat&&!spacePan){cancelDraft(true);if(pathDraft){pathDraft.cursor=null;drawPathDraft();}spacePan=true;showTool();}return;}
     if(key==='escape'){cancelDraft();return;}
-    if(key==='enter'&&polygonDraft&&effectiveTool()==='polygon'&&!e.target.closest?.('button,a,[role="button"]')){e.preventDefault();finishPolygon();return;}
+    if(key==='enter'&&pathDraft&&effectiveTool()===pathDraft.type&&!e.target.closest?.('button,a,[role="button"]')){e.preventDefault();finishPath();return;}
     if(key==='delete'||key==='backspace'){e.preventDefault();removeSelected();return;}
-    const shortcuts={'1':'select','2':'box','3':'line','4':'point','5':'polygon',h:'pan'};
+    const shortcuts={'1':'select','2':'box','3':'polyline','4':'point','5':'polygon',h:'pan'};
     if(shortcuts[key]){e.preventDefault();if(!e.repeat)chooseTool(shortcuts[key]);return;}
     if(key==='q'||key==='e'||key==='f'){if(!active())return;e.preventDefault();ui[key==='q'?'zoom-in':key==='e'?'zoom-out':'zoom-fit'].click();}
   });
@@ -299,7 +310,7 @@
         const type=b.type||'box';let shape;
         if(type==='box')shape={name:'rect',x:b.x,y:b.y,width:b.width,height:b.height};
         else if(type==='point')shape={name:'point',cx:b.x,cy:b.y};
-        else{const points=type==='line'?[{x:b.x1,y:b.y1},{x:b.x2,y:b.y2}]:b.points;shape={name:type==='line'?'polyline':'polygon',all_points_x:points.map(p=>p.x),all_points_y:points.map(p=>p.y)};}
+        else{const points=type==='line'?[{x:b.x1,y:b.y1},{x:b.x2,y:b.y2}]:b.points;shape={name:type==='line'||type==='polyline'?'polyline':'polygon',all_points_x:points.map(p=>p.x),all_points_y:points.map(p=>p.y)};}
         return{shape_attributes:shape,region_attributes:{label:b.label,description:b.description||''}};
       });
       data[`${filename}${size}`]={filename,size,regions,file_attributes:{original_filename:image.filename}};
@@ -310,14 +321,41 @@
     const columns=['image_index','image_filename','original_filename','image_width','image_height','annotation_id','type','label','description','x','y','width','height','x1','y1','x2','y2','points_json'];
     const rows=[columns.join(',')];images.forEach((image,index)=>{
       for(const b of image.annotations.length?image.annotations:[null]){
-        const type=b?.type||'box',values=[index+1,imageName(image,index),image.filename,image.width,image.height,b?.id??'',b?type:'',b?.label??'',b?.description??'',b&&(type==='box'||type==='point')?b.x:'',b&&(type==='box'||type==='point')?b.y:'',type==='box'&&b?b.width:'',type==='box'&&b?b.height:'',type==='line'&&b?b.x1:'',type==='line'&&b?b.y1:'',type==='line'&&b?b.x2:'',type==='line'&&b?b.y2:'',type==='polygon'&&b?JSON.stringify(b.points):''];
+        const type=b?.type||'box',values=[index+1,imageName(image,index),image.filename,image.width,image.height,b?.id??'',b?type:'',b?.label??'',b?.description??'',b&&(type==='box'||type==='point')?b.x:'',b&&(type==='box'||type==='point')?b.y:'',type==='box'&&b?b.width:'',type==='box'&&b?b.height:'',type==='line'&&b?b.x1:'',type==='line'&&b?b.y1:'',type==='line'&&b?b.x2:'',type==='line'&&b?b.y2:'',(type==='polygon'||type==='polyline')&&b?JSON.stringify(b.points):''];
         rows.push(values.map(csvCell).join(','));
       }
     });return'\ufeff'+rows.join('\r\n')+'\r\n';
   }
+  const formatShapes={yolo:['box'],voc:['box'],coco:['box','polygon'],cvat:['box','line','polyline','polygon','point'],vgg:['box','line','polyline','polygon','point'],csv:['box','line','polyline','polygon','point'],json:['box','line','polyline','polygon','point']};
+  function exportCompatibility(format,images){
+    const supported=formatShapes[format];if(!supported)throw new Error('Unknown export format.');
+    const skipped={};let included=0,total=0;
+    for(const image of images)for(const shape of image.annotations){const type=shape.type||'box';total++;if(supported.includes(type))included++;else skipped[type]=(skipped[type]||0)+1;}
+    return {included,total,skipped};
+  }
+  // XML 1.0 excludes control characters; entities preserve label whitespace in attributes.
+  const cvatText=value=>xmlText(String(value??'').replace(/[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu,'')).replace(/\r/g,'&#13;').replace(/\n/g,'&#10;').replace(/\t/g,'&#9;');
+  function cvatXml(images){
+    const labels=[...new Set(images.flatMap(image=>image.annotations.map(b=>b.label)))];
+    const labelXml=labels.map(label=>`<label><name>${cvatText(label)}</name><type>any</type><attributes><attribute><name>description</name><mutable>False</mutable><input_type>text</input_type><default_value></default_value><values></values></attribute></attributes></label>`).join('\n');
+    const records=images.map((image,index)=>{
+      const shapes=image.annotations.map((b,order)=>{
+        const type=b.type||'box',tag=type==='line'?'polyline':type==='point'?'points':type;
+        const points=type==='line'?[{x:b.x1,y:b.y1},{x:b.x2,y:b.y2}]:type==='point'?[{x:b.x,y:b.y}]:b.points;
+        const geometry=type==='box'?`xtl="${b.x}" ytl="${b.y}" xbr="${b.x+b.width}" ybr="${b.y+b.height}"`:`points="${points.map(p=>`${p.x},${p.y}`).join(';')}"`;
+        return `    <${tag} label="${cvatText(b.label)}" ${geometry} occluded="0" z_order="${order}"><attribute name="description">${cvatText(b.description||'')}</attribute></${tag}>`;
+      }).join('\n');
+      // CVAT image names are relative to the ZIP's images/ directory.
+      return `  <image id="${index}" name="${cvatText(imageName(image,index))}" width="${image.width}" height="${image.height}">\n${shapes}\n  </image>`;
+    }).join('\n');
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<annotations>\n  <version>1.1</version>\n  <meta><task><id>0</id><name>Boundless</name><size>${images.length}</size><mode>annotation</mode><overlap>0</overlap><bugtracker></bugtracker><flipped>False</flipped><labels>${labelXml}</labels><segments></segments><owner><username></username><email></email></owner></task></meta>\n${records}\n</annotations>\n`;
+  }
   function exportFiles(format,images,current,options={}){
     const {includeImages=true,includeMap=false,split=false}=options;
-    const files=[],all=images.flatMap(image=>image.annotations),boxes=all.filter(b=>(b.type||'box')==='box');let included=all.length;
+    const compatibility=exportCompatibility(format,images);
+    const all=images.flatMap(image=>image.annotations);
+    images=images.map(image=>({...image,annotations:image.annotations.filter(b=>formatShapes[format].includes(b.type||'box'))}));
+    const files=[],boxes=all.filter(b=>(b.type||'box')==='box');let included=compatibility.included;
     const groups=split&&!current?datasetSplit(images):null;
     const entries=images.map((image,index)=>({image,index}));
     const folderFor=index=>groups?splitNames.find(name=>groups[name].some(entry=>entry.index===index))+'/':'';
@@ -337,14 +375,15 @@
       if(groups){for(const name of splitNames)if(groups[name].length)files.push([`annotations/instances_${name}.json`,json(cocoDataset(groups[name],images,name))]);}
       else files.push(['annotations/instances.json',json(cocoDataset(entries,images))]);
       addImages('images/');
-    }else if(format==='vgg'){files.push(['via_region_data.json',json(vggDataset(images))]);addImages('');}
+    }else if(format==='cvat'){files.push(['annotations.xml',cvatXml(images)]);addImages('images/');}
+    else if(format==='vgg'){files.push(['via_region_data.json',json(vggDataset(images))]);addImages('');}
     else if(format==='csv'){files.push(['labels.csv',csvDataset(images)]);addImages('images/');}
     else if(format==='json'){
       const data=current?{image:{filename:imageName(images[0],0),original_filename:images[0].filename,width:images[0].width,height:images[0].height},annotations:structuredClone(images[0].annotations)}:{images:images.map(exported)};
       files.push(['boundless.json',json(data)]);addImages('images/');
     }
     if(groups){
-      // CSV, VGG, Boundless, and VOC keep their native data layout; this manifest assigns images to splits.
+      // CVAT, CSV, VGG, Boundless, and VOC keep their native data layout; this manifest assigns images to splits.
       files.push(['splits.json',json(Object.fromEntries(splitNames.map(name=>[name,groups[name].map(({image,index})=>imageName(image,index))])))]);
     }
     if(includeMap)files.push(mapFile(images));
@@ -362,11 +401,17 @@
     const size=directory.reduce((sum,entry)=>sum+entry.length,0);if(offset+size>=0xffffffff)throw new Error('Dataset too large for a browser ZIP (4 GB limit).');
     const end=new Uint8Array(22),view=new DataView(end.buffer);view.setUint32(0,0x06054b50,true);view.setUint16(8,files.length,true);view.setUint16(10,files.length,true);view.setUint32(12,size,true);view.setUint32(16,offset,true);return new Blob([...parts,...directory,end],{type:'application/zip'});
   }
-  const exportDefaults={yolo:'boundless-yolo',voc:'boundless-voc',coco:'boundless-coco',vgg:'boundless-vgg',csv:'boundless-csv',json:'boundless-dataset'};
+  const exportDefaults={yolo:'boundless-yolo',voc:'boundless-voc',cvat:'boundless-cvat',coco:'boundless-coco',vgg:'boundless-vgg',csv:'boundless-csv',json:'boundless-dataset'};
   let exportRequest=null,exportBusy=false;
   function announceExport(format,included,total){const skipped=total-included;status(`Exported ${format}: ${included} ${included===1?'annotation':'annotations'}${skipped?`; skipped ${skipped} unsupported ${skipped===1?'shape':'shapes'}`:''}.`);}
   const exportOptions=()=>({includeImages:ui['include-images'].checked,includeMap:ui['include-map'].checked,split:ui['split-dataset'].checked});
   function updateExportDetails(){if(!exportRequest)return;const {format,images,current}=exportRequest;
+    const compatibility=exportCompatibility(format,images),skipped=compatibility.total-compatibility.included;
+    ui['export-compatibility'].textContent=`${current?'Current Image':'Full Dataset'}: ${compatibility.included} of ${compatibility.total} annotations will be exported.`;
+    ui['export-warning'].hidden=!skipped;
+    ui['export-skipped'].textContent=skipped?`Skipped: ${Object.entries(compatibility.skipped).map(([type,count])=>`${count} ${type}${count===1?'':'s'}`).join(', ')}. Choose CVAT XML, VGG, CSV, or Boundless JSON to include all supported Boundless shapes.`:'';
+    ui['allow-partial'].required=!!skipped;ui['allow-partial'].disabled=!skipped;
+    ui['confirm-export'].disabled=exportBusy||!!skipped&&!ui['allow-partial'].checked;
     const {files,groups}=exportFiles(format,images,current,exportOptions()),encoder=new TextEncoder();
     // This ZIP uses stored entries, so every byte and header is known before packaging.
     const size=files.reduce((sum,[name,content])=>sum+(typeof content==='string'?encoder.encode(content).length:content.size)+76+2*encoder.encode(name).length,22);
@@ -376,23 +421,25 @@
     ui['export-details'].textContent=`${images.length} ${images.length===1?'image':'images'}. ${count}Estimated ZIP size: ${display} (stored without compression). ${warning}${!ui['include-images'].checked?'Image references remain, but image files are omitted. ':''}Only the outer ZIP is renamed.`;
   }
   function openExport(format,current){const images=current?[active()].filter(Boolean):[...project.images];if(!images.length)return;
-    exportRequest={format,images,current};ui['split-choice'].hidden=current;
+    exportRequest={format,images,current};ui['allow-partial'].checked=false;ui['split-choice'].hidden=current;
     ui['include-images'].checked=true;ui['include-map'].checked=false;ui['split-dataset'].checked=false;
     ui['export-name'].value=current?`${safeStem(images[0])}-${format}`:exportDefaults[format];
     updateExportDetails();
     ui['export-dialog'].showModal();ui['export-name'].focus();ui['export-name'].select();
   }
-  for(const key of ['include-images','include-map','split-dataset'])ui[key].addEventListener('change',updateExportDetails);
-  for(const [id,format,current] of [['yolo','yolo',true],['yolo-all','yolo',false],['voc-current','voc',true],['voc-all','voc',false],['coco','coco',false],['vgg','vgg',false],['csv','csv',false],['json-current','json',true],['json','json',false]])ui[id].addEventListener('click',()=>openExport(format,current));
+  for(const key of ['include-images','include-map','split-dataset','allow-partial'])ui[key].addEventListener('change',updateExportDetails);
+  for(const [id,format,current] of [['yolo','yolo',true],['yolo-all','yolo',false],['voc-current','voc',true],['voc-all','voc',false],['cvat-current','cvat',true],['cvat-all','cvat',false],['coco','coco',false],['vgg','vgg',false],['csv','csv',false],['json-current','json',true],['json','json',false]])ui[id].addEventListener('click',()=>openExport(format,current));
   ui['cancel-export'].addEventListener('click',()=>ui['export-dialog'].close());
-  ui['export-dialog'].addEventListener('close',()=>{exportRequest=null;});
+  ui['export-dialog'].addEventListener('close',()=>{if(!ui['export-dialog'].open)exportRequest=null;});
   ui['export-form'].addEventListener('submit',async e=>{e.preventDefault();if(exportBusy||!exportRequest)return;
     let name=ui['export-name'].value.trim().replace(/\.zip$/i,'').replace(/[\\/:*?"<>|\x00-\x1f]/g,'_').replace(/[. ]+$/,'');
     if(!name){ui['export-name'].setCustomValidity('Enter a filename.');ui['export-name'].reportValidity();return;}
-    const {format,images,current}=exportRequest;exportBusy=true;ui['confirm-export'].disabled=true;status('Packaging images and annotations locally…');
+    const {format,images,current}=exportRequest,compatibility=exportCompatibility(format,images);
+    if(compatibility.included<compatibility.total&&!ui['allow-partial'].checked){updateExportDetails();ui['allow-partial'].reportValidity();return;}
+    exportBusy=true;ui['confirm-export'].disabled=true;status('Packaging images and annotations locally…');
     try{const {files,included,total}=exportFiles(format,images,current,exportOptions()),blob=await zipFiles(files);download(`${name}.zip`,blob,'application/zip');ui['export-dialog'].close();announceExport(format.toUpperCase(),included,total);}
     catch(error){status(`Export failed: ${error.message}`);}
-    finally{exportBusy=false;ui['confirm-export'].disabled=false;}
+    finally{exportBusy=false;updateExportDetails();}
   });
   ui['export-name'].addEventListener('input',()=>ui['export-name'].setCustomValidity(''));
   render();
