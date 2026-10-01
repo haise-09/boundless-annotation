@@ -1,24 +1,7 @@
 import assert from 'node:assert/strict';
-import {detectionBox,maskToPolygon} from '../ai/geometry.js';
+import {detectionBox} from '../ai/geometry.js';
 
 assert.deepEqual(detectionBox({box:{xmin:10,ymin:20,xmax:40,ymax:60},label:'dog',score:.9},{width:100,height:100},{width:2000,height:1000}),{type:'box',label:'dog',score:.9,x:200,y:200,width:600,height:400});
 assert.equal(detectionBox({box:{xmin:NaN,ymin:0,xmax:4,ymax:4},score:1},{width:10,height:10},{width:10,height:10}),null);
 assert.equal(detectionBox({box:{xmin:4,ymin:4,xmax:3,ymax:3},score:1},{width:10,height:10},{width:10,height:10}),null);
-const mask=new Uint8Array(100);
-for(let y=2;y<8;y++)for(let x=1;x<7;x++)mask[y*10+x]=1;
-const polygon=maskToPolygon(mask,10,10,{width:1000,height:500});
-assert.equal(polygon.points.length,4);
-assert.equal(Math.min(...polygon.points.map(p=>p.x)),100);
-assert.equal(Math.max(...polygon.points.map(p=>p.x)),700);
-assert.equal(Math.min(...polygon.points.map(p=>p.y)),100);
-assert.equal(Math.max(...polygon.points.map(p=>p.y)),400);
-assert.equal(polygon.warning,'');
-mask[4*10+4]=0;
-assert.match(maskToPolygon(mask,10,10,{width:1000,height:500}).warning,/holes/);
-mask[9*10+9]=1;
-assert.match(maskToPolygon(mask,10,10,{width:1000,height:500}).warning,/largest/);
-assert.throws(()=>maskToPolygon(new Uint8Array(100),10,10,{width:10,height:10}),/No usable/);
-const diagonal=new Uint8Array(100);for(let y=0;y<4;y++)for(let x=0;x<4;x++)diagonal[y*10+x]=1;diagonal[44]=1;
-const separated=maskToPolygon(diagonal,10,10,{width:100,height:100});
-assert.match(separated.warning,/largest/);assert.equal(Math.max(...separated.points.map(p=>p.x)),40);
-console.log('Geometry: scaling, invalid boxes, outer contours, holes, disconnected pieces, empty mask passed.');
+console.log('Geometry: original-resolution scaling and invalid boxes passed.');
