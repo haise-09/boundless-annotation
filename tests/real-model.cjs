@@ -20,7 +20,9 @@ const assert=require('node:assert/strict');
     }
     throw Error('Inference exceeded six minutes');
   }
-  await page.locator('#ai-detect').click();await page.getByRole('button',{name:'Download & Continue'}).click();
+  assert.equal(await page.locator('#ai-panel').getAttribute('open'),null);
+ await page.locator('#ai-panel > summary').click();
+ await page.locator('#ai-detect').click();await page.getByRole('button',{name:'Download & Continue'}).click();
   await waitForResult();assert.match(await page.locator('#ai-review').textContent(),/dog/i);
   await page.locator('#ai-accept').click();
   assert.match(await page.locator('#annotations').textContent(),/BOX\s+dog/);
