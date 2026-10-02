@@ -2,9 +2,13 @@
 
 **Version 1.5.0** · A quick, browser-only image annotation tool.
 
+[**Open Boundless →**](https://boundless-annotation.netlify.app/)
+
+![Boundless workspace showing Smart Annotate, six car bounding boxes, and annotation editing controls](docs/images/boundless-preview.png)
+
 ## Version 1.5.0 additions
 
-This branch adds optional **Smart Annotate** with local browser inference and human review. It includes the stable v1.4.0 polyline/CVAT tools. AI Assistance starts collapsed; open it when you want suggestions. Smart Annotate remains an optional preview feature.
+Version 1.5.0 adds optional **Smart Annotate** with local browser inference and human review. It includes the stable v1.4.0 polyline/CVAT tools. AI Assistance starts collapsed; open it when you want suggestions. Smart Annotate remains an optional preview feature.
 
 - Review dashed, labeled suggestions before accepting. Adjust confidence, check individual suggestions, then **Accept Selected**. A compact count shows suggestions and selections.
 - Re-running replaces only the pending preview. Likely duplicates of accepted boxes (same label, intersection-over-union at least 80%) start unchecked. Explicit selection can override this; existing annotations are never replaced.
