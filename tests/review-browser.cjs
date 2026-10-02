@@ -1,0 +1,61 @@
+const {chromium}=require('playwright');
+const assert=require('node:assert/strict');
+const base=process.env.TEST_URL||'http://localhost:8765';
+(async()=>{
+ const browser=await chromium.launch({headless:true,...(process.env.CHROME_PATH?{executablePath:process.env.CHROME_PATH}:{})});
+ const page=await browser.newPage({viewport:{width:1440,height:1100}}),errors=[],remote=[];
+ page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(!r.url().startsWith(base))remote.push(r.url());});
+ await page.route('**/app.js',async route=>{const response=await route.fetch(),source=await response.text();await route.fulfill({response,body:source.replace('  render();\n})();','  window.__test={active,exportFiles,render};\n  render();\n})();')});});
+ let fail=false;
+ await page.route('**/ai/worker.js',route=>route.fulfill({contentType:'text/javascript',body:fail?`self.onmessage=({data})=>self.postMessage({type:'error',id:data.id,imageId:data.imageId,message:'Test model failure'});`:`self.onmessage=({data})=>{self.postMessage({type:'progress',id:data.id,imageId:data.imageId,text:'Downloading test model: 50%'});setTimeout(()=>self.postMessage({type:'result',id:data.id,imageId:data.imageId,backend:'Test worker',labels:['dog','cat','person'],suggestions:[{type:'box',label:'dog',score:.9,x:10,y:10,width:80,height:60},{type:'box',label:'cat',score:.35,x:100,y:70,width:50,height:50}]}),350);};`}));
+ await page.goto(base);
+ const buffer=Buffer.from(await page.evaluate(()=>{const c=document.createElement('canvas');c.width=200;c.height=150;return c.toDataURL().split(',')[1]}),'base64');
+ await page.locator('#file').setInputFiles([{name:'same.png',mimeType:'image/png',buffer},{name:'same.png',mimeType:'image/png',buffer}]);
+ await page.waitForFunction(()=>document.querySelector('#image-count').textContent==='2 images');
+ assert.equal(await page.locator('#ai-panel').getAttribute('open'),null);
+ await page.locator('#ai-panel > summary').click();
+ await page.locator('#ai-detect').click();await page.getByRole('button',{name:'Download & Continue'}).click();
+ await page.waitForFunction(()=>document.querySelector('#ai-message').textContent.includes('50%'));
+ assert(await page.locator('#ai-progress').isVisible());
+ await page.waitForFunction(()=>document.querySelectorAll('.ai-review-row').length===1);
+ assert.equal(await page.locator('#ai-supported-labels,#ai-class-filters,#ai-select-all,#ai-select-none,#ai-accept-all').count(),0);
+ await page.locator('#ai-threshold').fill('0.3');
+ assert.equal(await page.locator('.ai-review-row').count(),2);
+ await page.locator('.ai-review-row').filter({hasText:/^cat ·/}).locator('input').uncheck();
+ await page.locator('.ai-review-row').filter({hasText:'dog'}).locator('input').uncheck();
+ assert(await page.locator('#ai-accept').isDisabled());
+ await page.locator('.ai-review-row').filter({hasText:'dog'}).locator('input').check();
+ assert.equal(await page.locator('#ai-summary').textContent(),'2 suggestions · 1 selected');
+ await page.locator('#ai-accept').click();
+ assert.equal(await page.locator('#count').textContent(),'1 annotation');
+ const exports=await page.evaluate(()=>{const t=window.__test,i=t.active(),options={includeImages:false,includeMap:false,split:false};const out={};for(const format of ['json','cvat','coco','voc','yolo','vgg','csv']){try{out[format]=t.exportFiles(format,[i],true,options).files.filter(([n,c])=>typeof c==='string').map(([n,c])=>c).join('\n');}catch(e){out[format]='ERROR '+e.message;}}return {out,annotations:i.annotations};});
+ assert.equal(exports.annotations[0].source.confidence,.9);assert.equal(exports.annotations[0].source.reviewed,true);
+ assert.match(exports.out.json,/ai-assisted/);
+ for(const [format,text] of Object.entries(exports.out)){assert(!text.startsWith('ERROR'),format+text);if(format!=='json')assert(!text.includes('ai-assisted')&&!text.includes('rtdetr'),format);}
+ // Re-run replaces pending cat, flags already accepted dog and cannot double-accept by default.
+ await page.locator('#ai-detect').click();await page.waitForFunction(()=>document.querySelectorAll('.ai-review-row').length===2);
+ const dog=page.locator('.ai-review-row').filter({hasText:'dog'});
+ assert.match(await dog.textContent(),/Likely Duplicate/);assert(!await dog.locator('input').isChecked());
+ await page.locator('.ai-review-row').filter({hasText:/^cat ·/}).locator('input').uncheck();
+ assert(await page.locator('#ai-accept').isDisabled());
+ await dog.locator('input').check();assert(await dog.locator('input').isChecked());
+ await page.locator('#ai-accept').click();assert.equal(await page.locator('#count').textContent(),'2 annotations');
+ await page.locator('#undo').click();assert.equal(await page.locator('#count').textContent(),'1 annotation');
+ // New image starts independent, stale work is cancelled, clear accepted image retains previews safely.
+ await page.locator('#next').click();assert.equal(await page.locator('#count').textContent(),'0 annotations');
+ assert.equal(await page.locator('.ai-review-row').count(),0);
+ await page.locator('#ai-detect').click();await page.locator('#ai-cancel').click();await page.waitForTimeout(450);
+ assert.equal(await page.locator('.ai-review-row').count(),0);assert(!await page.locator('#ai-progress').isVisible());
+ fail=true;await page.locator('#ai-detect').click();await page.waitForFunction(()=>document.querySelector('#ai-message').textContent.includes('Test model failure'));
+ assert(!await page.locator('#ai-detect').isDisabled());
+ fail=false;await page.locator('#ai-detect').click();await page.waitForFunction(()=>document.querySelectorAll('.ai-review-row').length===2);
+ await page.locator('#ai-accept').click();assert.equal(await page.locator('#count').textContent(),'2 annotations');
+ await page.locator('#previous').click();assert.equal(await page.locator('#count').textContent(),'1 annotation');
+ // Responsive review UI at a phone-sized viewport.
+ await page.setViewportSize({width:390,height:844});await page.locator('#ai-detect').click();await page.waitForFunction(()=>document.querySelectorAll('.ai-review-row').length===2);
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ await page.screenshot({path:'/tmp/boundless-ai-review-mobile.png',fullPage:true});
+ await page.setViewportSize({width:1440,height:1100});await page.screenshot({path:'/tmp/boundless-ai-review-desktop.png',fullPage:true});
+ assert.deepEqual(errors,[]);assert.deepEqual(remote,[]);
+ await browser.close();console.log('AI review passed: progress, compact UI, individual acceptance, duplicate protection/override, undo, export metadata, isolation, cancel, recovery, mobile layout, no remote requests.');
+})().catch(e=>{console.error(e);process.exit(1)});

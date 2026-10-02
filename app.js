@@ -1,6 +1,7 @@
 (() => {
   'use strict';
   const $=id=>document.getElementById(id);
+  let ai=null;
   const ui=Object.fromEntries(['file','export-dialog','export-form','export-name','export-details','export-compatibility','export-warning','export-skipped','allow-partial','include-images','include-map','split-dataset','split-choice','cancel-export','confirm-export','export-menu','json','json-current','yolo','yolo-all','voc-current','voc-all','cvat-current','cvat-all','coco','vgg','csv','undo','clear','reset','drop','empty','image-wrap','image','overlay','crosshair','crosshair-coordinates','meta','status','classes','class-count','annotations','count','label-input','description-input','rename','delete','label-dialog','label-form','cancel-label','new-label','new-description','image-count','image-list','previous','next','position','tool-select','tool-pan','tool-box','tool-polyline','tool-point','tool-polygon','finish-polygon','finish-polyline','zoom-in','zoom-out','zoom-fit','zoom-level'].map(id=>[id,$(id)]));
   const project={images:[]};
   let activeId=null,draft=null,pathDraft=null,pending=null,editDraft=null,panDraft=null,lastLabel='',session=0,tool='box',spacePan=false,lastPointer=null;
@@ -121,7 +122,8 @@
     ui['class-count'].textContent=`${classes.length} ${classes.length===1?'class':'classes'}`;
     const current=annotations.find(b=>b.id===selected);ui['label-input'].disabled=ui['description-input'].disabled=ui.rename.disabled=ui.delete.disabled=!current;
     ui['label-input'].value=current?.label??'';ui['description-input'].value=current?.description??'';updateZoom();
-    if(pathDraft)drawPathDraft();updateFinishControls();
+    if(pathDraft)drawPathDraft();
+    updateFinishControls();ai?.render();
   }
   function cancelDraft(keepPath=false){if(editDraft){Object.assign(editDraft.annotation,editDraft.original);editDraft=null;render();}panDraft=null;ui.overlay.classList.remove('panning');if(draft){try{ui.overlay.releasePointerCapture(draft.pointer);}catch{}draft=null;ui.overlay.querySelector('.draft')?.remove();}if(pathDraft&&!keepPath){pathDraft=null;ui.overlay.querySelector('.polygon-draft')?.remove();}updateFinishControls();}
   function closeDrawing(){cancelDraft();pending=null;if(ui['label-dialog'].open)ui['label-dialog'].close('cancel');}
@@ -224,7 +226,7 @@
   const typingTarget=element=>!!element?.closest?.('input, textarea, select, [contenteditable="true"], [role="textbox"]');
   function releaseTemporaryPan(){if(!spacePan)return;spacePan=false;if(panDraft){try{ui.overlay.releasePointerCapture(panDraft.pointer);}catch{}panDraft=null;ui.overlay.classList.remove('panning');}showTool();}
   document.addEventListener('keydown',e=>{
-    if(e.isComposing||ui['label-dialog'].open||ui['export-dialog'].open||typingTarget(e.target)||e.target.closest?.('#export-menu'))return;
+    if(e.isComposing||ui['label-dialog'].open||ui['export-dialog'].open||document.getElementById('ai-consent').open||typingTarget(e.target)||e.target.closest?.('#export-menu'))return;
     const key=e.key.toLowerCase();
     if((e.ctrlKey||e.metaKey)&&!e.altKey&&key==='z'){e.preventDefault();ui.undo.click();return;}
     if(e.ctrlKey||e.metaKey||e.altKey)return;
@@ -442,5 +444,11 @@
     finally{exportBusy=false;updateExportDetails();}
   });
   ui['export-name'].addEventListener('input',()=>ui['export-name'].setCustomValidity(''));
+  import('./ai/controller.js').then(({createAIController})=>{ai=createAIController({active,chooseTool,
+    commit(imageId,shapes){const image=project.images.find(item=>item.id===imageId);if(!image)return;
+      const before=snapshot(image);for(const shape of shapes)image.annotations.push({...shape,id:image.nextId++});
+      image.selected=image.annotations.at(-1)?.id;lastLabel=shapes.at(-1)?.label||lastLabel;recordUndo(image,before);render();
+    }
+  });ai.render();}).catch(()=>{document.getElementById('ai-message').textContent='AI needs an HTTP/HTTPS page and a browser with module support. Manual annotation remains available.';});
   render();
 })();

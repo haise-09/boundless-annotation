@@ -1,10 +1,21 @@
 # Boundless
 
-**Version 1.4.0** · A quick, browser-only image annotation tool.
+**Version 1.5.0** · A quick, browser-only image annotation tool.
+
+## Version 1.5.0 additions
+
+This branch adds optional **Smart Annotate** with local browser inference and human review. It includes the stable v1.4.0 polyline/CVAT tools. AI Assistance starts collapsed; open it when you want suggestions. Smart Annotate remains an optional preview feature.
+
+- Review dashed, labeled suggestions before accepting. Adjust confidence, check individual suggestions, then **Accept Selected**. A compact count shows suggestions and selections.
+- Re-running replaces only the pending preview. Likely duplicates of accepted boxes (same label, intersection-over-union at least 80%) start unchecked. Explicit selection can override this; existing annotations are never replaced.
+- Accepted batches use the existing per-image Undo, editing and export tools. Confidence/model metadata is retained only in native Boundless JSON.
+- Models download after consent; images and annotation data remain local. Loading/download/detection status, cancellation, and error recovery are provided. No AI polygon tool is included.
+
+Read [the Smart Annotate guide](ai/README.md) for usage, model downloads, adapter design, testing and limitations.
 
 ## Version 1.4.0 additions
 
-Polyline annotation, CVAT XML export, and explicit confirmation before partial exports. AI assistance remains a separate, unmerged experiment and is not included in this release.
+Polyline annotation, CVAT XML export, and explicit confirmation before partial exports. Introduced in v1.4.0 and retained in v1.5.0.
 
 - Polyline replaces the Line tool on shortcut **3**. Click two or more vertices and finish with Enter or **Finish Polyline**. It stays open; a two-vertex polyline is a straight line. Clicking the first vertex does not auto-finish a polyline.
 - See a live preview, use Select to move the whole path or drag its vertex handles, rename/delete it, and undo completed changes.
@@ -63,7 +74,7 @@ Polyline annotation, CVAT XML export, and explicit confirmation before partial e
 
 Project save and reopen is planned for a later version.
 
-A small, static browser app for manually drawing labeled bounding boxes on multiple images. Images stay in your browser. No account, backend, database, AI, or build process is used.
+A small, static browser app for manually drawing labeled bounding boxes on multiple images. Images stay in your browser. No account, backend, database, or build process is used. Optional AI assistance runs locally on the device.
 
 ## Use
 

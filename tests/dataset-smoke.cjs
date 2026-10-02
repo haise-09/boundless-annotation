@@ -1,0 +1,23 @@
+const {chromium}=require('playwright'),assert=require('node:assert/strict');
+(async()=>{
+ const base=process.env.TEST_URL||'http://localhost:8765';
+ const browser=await chromium.launch({headless:true,...(process.env.CHROME_PATH?{executablePath:process.env.CHROME_PATH}:{})});
+ const page=await browser.newPage(),errors=[],remote=[];page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(!r.url().startsWith(base))remote.push(r.url());});
+ await page.route('**/app.js',async route=>{const response=await route.fetch(),source=await response.text();await route.fulfill({response,body:source.replace('  render();\n})();','  window.__test={project,active,render,exportFiles};\n  render();\n})();')});});
+ await page.goto(base);assert.equal(await page.locator('#ai-panel').getAttribute('open'),null);
+ const buffer=Buffer.from(await page.evaluate(()=>{const c=document.createElement('canvas');c.width=400;c.height=300;return c.toDataURL().split(',')[1]}),'base64');
+ const file={name:'duplicate.png',mimeType:'image/png',buffer};
+ await page.locator('#file').setInputFiles([file,file]);await page.waitForFunction(()=>__test.project.images.length===2);
+ await page.evaluate(()=>{let i=__test.active();i.annotations.push({id:i.nextId++,type:'box',label:'item',description:'',x:20,y:30,width:40,height:60});__test.render();});
+ await page.locator('#file').setInputFiles(Array.from({length:8},()=>file));await page.waitForFunction(()=>__test.project.images.length===10);
+ const result=await page.evaluate(async()=>{const t=__test,images=t.project.images,options={includeImages:true,includeMap:true,split:true};const a=t.exportFiles('yolo',images,false,options),c=t.exportFiles('coco',images,false,options);const splits=JSON.parse(a.files.find(([n])=>n==='splits.json')[1]);return {ids:images.map(i=>i.id),count:images[0].annotations.length,splits,yolo:a.files.map(([n])=>n),coco:c.files.map(([n])=>n),bytes:await a.files.find(([n,v])=>v instanceof File)[1].arrayBuffer().then(b=>Array.from(new Uint8Array(b))),yaml:a.files.find(([n])=>n==='data.yaml')[1]};});
+ assert.equal(new Set(result.ids).size,10);assert.equal(result.count,1);assert.deepEqual(Object.values(result.splits).map(a=>a.length),[8,1,1]);assert.deepEqual(Buffer.from(result.bytes),buffer);
+ assert(result.yolo.includes('data.yaml'));assert(result.coco.includes('annotations/instances_train.json'));
+ assert.equal(new Set(result.yolo).size,result.yolo.length);
+ const stable=await page.evaluate(()=>{const t=__test;const a=t.exportFiles('yolo',t.project.images,false,{split:true}),b=t.exportFiles('yolo',t.project.images,false,{split:true});return a.files.find(([n])=>n==='splits.json')[1]===b.files.find(([n])=>n==='splits.json')[1]});assert(stable);
+ await page.locator('#file').setInputFiles({name:'broken.png',mimeType:'image/png',buffer:Buffer.from('invalid')});await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('could not be opened'));assert.equal(await page.locator('.image-choice').count(),10);
+ page.once('dialog',d=>d.dismiss());await page.locator('.remove-image').first().click();assert.equal(await page.locator('.image-choice').count(),10);
+ page.once('dialog',d=>d.accept());await page.locator('.remove-image').first().click();assert.equal(await page.locator('.image-choice').count(),9);assert.equal(await page.locator('#count').textContent(),'0 annotations');
+ await page.locator('#reset').click();assert.equal(await page.locator('.image-choice').count(),0);assert(await page.locator('#empty').isVisible());
+ assert.deepEqual(errors,[]);assert.deepEqual(remote,[]);await browser.close();console.log('Dataset smoke passed: additive uploads, unique IDs, original image bytes, split exports, corrupt file rejection, remove confirm/cancel, isolated removal and reset, no uploads.');
+})().catch(e=>{console.error(e);process.exit(1)});
