@@ -12,6 +12,8 @@ const base=process.env.TEST_URL||'http://localhost:8765';
  const buffer=Buffer.from(await page.evaluate(()=>{const c=document.createElement('canvas');c.width=200;c.height=150;return c.toDataURL().split(',')[1]}),'base64');
  await page.locator('#file').setInputFiles([{name:'same.png',mimeType:'image/png',buffer},{name:'same.png',mimeType:'image/png',buffer}]);
  await page.waitForFunction(()=>document.querySelector('#image-count').textContent==='2 images');
+ assert.equal(await page.locator('#ai-panel').getAttribute('open'),null);
+ await page.locator('#ai-panel > summary').click();
  await page.locator('#ai-detect').click();await page.getByRole('button',{name:'Download & Continue'}).click();
  await page.waitForFunction(()=>document.querySelector('#ai-message').textContent.includes('50%'));
  assert(await page.locator('#ai-progress').isVisible());

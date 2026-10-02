@@ -1,12 +1,12 @@
-# Local AI prototype
+# Smart Annotate
 
-This feature branch adds optional, human-reviewed suggestions to the existing static editor. It is a preview, not part of the stable v1.4.0 release.
+Version 1.5.0 adds optional, human-reviewed box suggestions to the existing static editor. Smart Annotate is marked Preview while device compatibility and model quality continue to be evaluated.
 
 ## Try it
 
-Open the Netlify deploy preview, or serve the repository with `python3 -m http.server 8000` and open `http://localhost:8000`. No build step or application server is required. Opening `index.html` directly still supports manual annotation; AI modules require HTTP/HTTPS.
+Open Boundless, or serve the repository with `python3 -m http.server 8000` and open `http://localhost:8000`. No build step or application server is required. Opening `index.html` directly still supports manual annotation; AI modules require HTTP/HTTPS.
 
-1. Add images as usual.
+1. Add images as usual. AI Assistance starts collapsed; open its heading to reveal Smart Annotate. Opening the panel does not download models.
 2. **Smart Annotate** loads RT-DETR and detects common objects in the active image. Confirm the initial model download. Adjust Detection Confidence and check/uncheck individual suggestions. Click **Accept Selected** to add checked, shown boxes. Hidden suggestions are never accepted. These generic labels may need renaming for your dataset.
 3. Dashed purple boxes with labels and confidence scores are previews, excluded from exports. Accepted shapes use the existing selection, edit, delete, and export tools. An accepted batch is one Undo step.
 4. **Cancel AI** terminates the worker and discards the unfinished preview. Switching/removing the active image also discards its unaccepted preview and cancels in-flight work. Accepted shapes remain attached to their image. Pan/zoom can be used while inspecting a preview.
@@ -51,6 +51,8 @@ Replacing a checkpoint within an architecture may only require registry changes.
 - The confidence slider filters detection scores; it does not represent a calibrated probability.
 
 ## Validation
+
+`node tests/dataset-smoke.cjs` (with a local static server, Playwright and optional `CHROME_PATH`) checks additive uploads, duplicate names, original bytes in export files, deterministic 80/10/10 splits, corrupt-file rejection, removal confirmation and reset. Browser AI tests assert that the panel starts collapsed and can be opened.
 
 `node tests/geometry.test.mjs` checks original-resolution box conversion and invalid boxes. `node tests/review.test.mjs` checks duplicate matching and prediction validation.
 
