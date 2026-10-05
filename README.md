@@ -6,6 +6,11 @@
 
 ![Boundless workspace showing Smart Annotate, six car bounding boxes, and annotation editing controls](docs/images/boundless-preview.png)
 
+## Export scope update
+
+- COCO, VGG, and CSV now offer Current Image and Full Dataset submenus, matching the other formats.
+- Current-image exports retain each format’s normal structure and shape support.
+
 ## Version 1.5.0 additions
 
 Version 1.5.0 adds optional **Smart Annotate** with local browser inference and human review. It includes the stable v1.4.0 polyline/CVAT tools. AI Assistance starts collapsed; open it when you want suggestions. Smart Annotate remains an optional preview feature.
@@ -106,7 +111,7 @@ Images and annotations live only in the current page's memory and disappear on r
 
 ## Export formats
 
-Choose a format in **Export**. YOLO, Pascal VOC, and Boundless JSON offer **Current Image** or **Full Dataset**; COCO, VGG, and CSV export the full dataset. Enter a name in the dialog to download one `.zip` file. Only the outer ZIP name is customized. **Include Original Images** is checked by default and adds the original uploaded files byte for byte, without re-encoding. Uncheck it for annotation-only handoff; an empty image directory remains in formats with an image directory, while names in the data still refer to their expected image paths. **Include image-map.json** is unchecked by default. The map is optional metadata listing original and packaged filenames and resolution; none of the annotation formats depend on it. The dialog estimates the ZIP size as you change options. Entries are stored without compression, so the estimate accounts for file bytes and ZIP headers, though browsers may present the downloaded size differently. Large datasets need browser memory; the ZIP writer has a 4 GB archive limit. Nothing is uploaded.
+Choose a format in **Export**. Every format offers **Current Image** or **Full Dataset**, including COCO, VGG, and CSV. Current Image includes only the active image and its annotations; Full Dataset includes all loaded images. Both use the same ZIP naming, optional original images, and optional image-map settings. Dataset splitting is available only for Full Dataset. Enter a name in the dialog to download one `.zip` file. Only the outer ZIP name is customized. **Include Original Images** is checked by default and adds the original uploaded files byte for byte, without re-encoding. Uncheck it for annotation-only handoff; an empty image directory remains in formats with an image directory, while names in the data still refer to their expected image paths. **Include image-map.json** is unchecked by default. The map is optional metadata listing original and packaged filenames and resolution; none of the annotation formats depend on it. The dialog estimates the ZIP size as you change options. Entries are stored without compression, so the estimate accounts for file bytes and ZIP headers, though browsers may present the downloaded size differently. Large datasets need browser memory; the ZIP writer has a 4 GB archive limit. Nothing is uploaded.
 
 **Split Dataset** is optional for full-dataset exports and off by default. The split is stable during an open browser session, and each image is assigned to exactly one group. For 1–4 images, all go to train; for 5–9, one goes to val and the rest to train; for 10, the split is 8/1/1; above 10, it rounds to approximately 80/10/10. The dialog previews counts. Tiny validation or test sets are poor performance measures; a YOLO export with no validation images is not ready to train. Reopening the same source images starts a new session with new internal IDs, so its split may differ. A `splits.json` manifest lists the packaged names for every group. For YOLO and COCO, image and annotation paths are also organized by split. VOC keeps matching XML files in `Annotations/` and adds `ImageSets/Main/train.txt`, `val.txt`, and `test.txt`. VGG, CSV, and Boundless retain their usual native data files alongside `splits.json`.
 

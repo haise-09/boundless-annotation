@@ -2,7 +2,7 @@
   'use strict';
   const $=id=>document.getElementById(id);
   let ai=null;
-  const ui=Object.fromEntries(['file','export-dialog','export-form','export-name','export-details','export-compatibility','export-warning','export-skipped','allow-partial','include-images','include-map','split-dataset','split-choice','cancel-export','confirm-export','export-menu','json','json-current','yolo','yolo-all','voc-current','voc-all','cvat-current','cvat-all','coco','vgg','csv','undo','clear','reset','drop','empty','image-wrap','image','overlay','crosshair','crosshair-coordinates','meta','status','classes','class-count','annotations','count','label-input','description-input','rename','delete','label-dialog','label-form','cancel-label','new-label','new-description','image-count','image-list','previous','next','position','tool-select','tool-pan','tool-box','tool-polyline','tool-point','tool-polygon','finish-polygon','finish-polyline','zoom-in','zoom-out','zoom-fit','zoom-level'].map(id=>[id,$(id)]));
+  const ui=Object.fromEntries(['file','export-dialog','export-form','export-name','export-details','export-compatibility','export-warning','export-skipped','allow-partial','include-images','include-map','split-dataset','split-choice','cancel-export','confirm-export','export-menu','json','json-current','yolo','yolo-all','voc-current','voc-all','cvat-current','cvat-all','coco','coco-current','vgg','vgg-current','csv','csv-current','undo','clear','reset','drop','empty','image-wrap','image','overlay','crosshair','crosshair-coordinates','meta','status','classes','class-count','annotations','count','label-input','description-input','rename','delete','label-dialog','label-form','cancel-label','new-label','new-description','image-count','image-list','previous','next','position','tool-select','tool-pan','tool-box','tool-polyline','tool-point','tool-polygon','finish-polygon','finish-polyline','zoom-in','zoom-out','zoom-fit','zoom-level'].map(id=>[id,$(id)]));
   const project={images:[]};
   let activeId=null,draft=null,pathDraft=null,pending=null,editDraft=null,panDraft=null,lastLabel='',session=0,tool='box',spacePan=false,lastPointer=null;
   const active=()=>project.images.find(item=>item.id===activeId)||null;
@@ -65,7 +65,7 @@
     ui['image-count'].textContent=`${project.images.length} ${project.images.length===1?'image':'images'}`;
     const hasDataset=!!project.images.length;
     ui.json.disabled=ui['yolo-all'].disabled=ui['voc-all'].disabled=ui['cvat-all'].disabled=ui.coco.disabled=ui.vgg.disabled=ui.csv.disabled=ui.reset.disabled=!hasDataset;
-    ui['json-current'].disabled=ui.yolo.disabled=ui['voc-current'].disabled=ui['cvat-current'].disabled=!image;
+    ui['json-current'].disabled=ui.yolo.disabled=ui['voc-current'].disabled=ui['cvat-current'].disabled=ui['coco-current'].disabled=ui['vgg-current'].disabled=ui['csv-current'].disabled=!image;
     ui['export-menu'].querySelector('.export-trigger').setAttribute('aria-disabled',String(!hasDataset));
     ui['export-menu'].querySelector('.export-trigger').tabIndex=hasDataset?0:-1;
     if(!hasDataset)ui['export-menu'].open=false;
@@ -430,7 +430,7 @@
     ui['export-dialog'].showModal();ui['export-name'].focus();ui['export-name'].select();
   }
   for(const key of ['include-images','include-map','split-dataset','allow-partial'])ui[key].addEventListener('change',updateExportDetails);
-  for(const [id,format,current] of [['yolo','yolo',true],['yolo-all','yolo',false],['voc-current','voc',true],['voc-all','voc',false],['cvat-current','cvat',true],['cvat-all','cvat',false],['coco','coco',false],['vgg','vgg',false],['csv','csv',false],['json-current','json',true],['json','json',false]])ui[id].addEventListener('click',()=>openExport(format,current));
+  for(const [id,format,current] of [['yolo','yolo',true],['yolo-all','yolo',false],['voc-current','voc',true],['voc-all','voc',false],['cvat-current','cvat',true],['cvat-all','cvat',false],['coco-current','coco',true],['coco','coco',false],['vgg-current','vgg',true],['vgg','vgg',false],['csv-current','csv',true],['csv','csv',false],['json-current','json',true],['json','json',false]])ui[id].addEventListener('click',()=>openExport(format,current));
   ui['cancel-export'].addEventListener('click',()=>ui['export-dialog'].close());
   ui['export-dialog'].addEventListener('close',()=>{if(!ui['export-dialog'].open)exportRequest=null;});
   ui['export-form'].addEventListener('submit',async e=>{e.preventDefault();if(exportBusy||!exportRequest)return;
