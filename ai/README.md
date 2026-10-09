@@ -71,3 +71,7 @@ Upstream references:
 ## Model selector regression checks
 
 Run `tests/model-choice.cjs` against a local static server with Playwright and CHROME_PATH configured. For the optional real-model test, use `TEST_MODEL=dino TEST_IMAGE=/path/to/dog.jpg` with `tests/real-model.cjs`; this explicitly downloads model files. Omit TEST_MODEL to test R18.
+
+### Empty-token decoding fix
+
+DINO can return weak candidates above the 0.1 box threshold with no text tokens above 0.25. Transformers.js 3.3.3 attempts to decode an empty token array in that case and throws `token_ids must be a non-empty array of integers`. The local `grounding.js` postprocessor skips candidates without usable tokens before decoding, also excludes special/padded tokens and punctuation-only labels, and preserves valid detections and coordinate conversion. Run `node --test tests/grounding.test.mjs` for deterministic regression cases. The real-model test accepts `TEST_LABELS=car TEST_EXPECT_LABEL=car` with a car photograph.

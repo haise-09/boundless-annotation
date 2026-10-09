@@ -8,6 +8,8 @@
 
 ## Grounding DINO branch experiment
 
+Fixed an empty-token decoding error that could fail a whole DINO search when one weak candidate had no usable label. Unlabeled candidates are now skipped while valid suggestions remain available.
+
 This branch adds a **Local Model** selector inside AI Assistance. Production is unchanged until this experiment is merged.
 
 - **Standard · RT-DETR R18** remains the default (~22 MB of model weights), for common object categories.

@@ -1,5 +1,6 @@
 import {MODELS,RUNTIME_URL} from './registry.js';
 import {detectionBox} from './geometry.js';
+import {groundedResults} from './grounding.js';
 
 let runtime;
 async function getRuntime(){
@@ -39,8 +40,8 @@ async function createGroundedDetector(report,config){
     let outputs;
     try{
       outputs=await model(inputs);
-      const result=processor.post_process_grounded_object_detection(outputs,inputs.input_ids,{box_threshold:0.1,text_threshold:0.25,target_sizes:[[raw.height,raw.width]]})[0];
-      const suggestions=result.boxes.map((b,i)=>detectionBox({box:{xmin:b[0],ymin:b[1],xmax:b[2],ymax:b[3]},score:result.scores[i],label:result.labels[i]},raw,{width,height})).filter(s=>s&&s.label.trim());
+      const results=groundedResults(outputs,inputs.input_ids,processor.tokenizer,{width:raw.width,height:raw.height});
+      const suggestions=results.map(result=>detectionBox(result,raw,{width,height})).filter(Boolean);
       return {suggestions,backend:'CPU / WASM'};
     }finally{for(const value of [...Object.values(inputs),...Object.values(outputs||{})])value?.dispose?.();}
   },dispose:()=>model.dispose()};

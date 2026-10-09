@@ -22,11 +22,11 @@ const assert=require('node:assert/strict');
   }
   assert.equal(await page.locator('#ai-panel').getAttribute('open'),null);
  await page.locator('#ai-panel > summary').click();
- if(process.env.TEST_MODEL==='dino'){await page.locator('#ai-model').selectOption('dino');await page.locator('#ai-labels').fill('dog, cat');await page.locator('#ai-threshold').fill('0.25');await page.locator('#ai-threshold').dispatchEvent('input');}
+ if(process.env.TEST_MODEL==='dino'){await page.locator('#ai-model').selectOption('dino');await page.locator('#ai-labels').fill(process.env.TEST_LABELS||'dog, cat');await page.locator('#ai-threshold').fill('0.25');await page.locator('#ai-threshold').dispatchEvent('input');}
  await page.locator('#ai-detect').click();await page.getByRole('button',{name:'Download & Continue'}).click();
-  await waitForResult();assert.match(await page.locator('#ai-review').textContent(),/dog/i);
+  await waitForResult();assert.match(await page.locator('#ai-review').textContent(),new RegExp(process.env.TEST_EXPECT_LABEL||'dog','i'));
   await page.locator('#ai-accept').click();
-  assert.match(await page.locator('#annotations').textContent(),/BOX\s+dog/);
+  assert.match(await page.locator('#annotations').textContent(),new RegExp('BOX\\s+'+(process.env.TEST_EXPECT_LABEL||'dog')));
   assert.equal(await page.locator('#tool-smart').count(),0);
   await page.screenshot({path:process.env.TEST_SCREENSHOT||'/tmp/boundless-ai-real.png',fullPage:true});
   assert.deepEqual(failures,[]);assert(requests.every(r=>r.method==='GET'||r.method==='HEAD'));
