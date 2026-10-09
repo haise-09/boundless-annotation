@@ -22,6 +22,7 @@ const assert=require('node:assert/strict');
   }
   assert.equal(await page.locator('#ai-panel').getAttribute('open'),null);
  await page.locator('#ai-panel > summary').click();
+ if(process.env.TEST_MODEL==='dino'){await page.locator('#ai-model').selectOption('dino');await page.locator('#ai-labels').fill('dog, cat');await page.locator('#ai-threshold').fill('0.25');await page.locator('#ai-threshold').dispatchEvent('input');}
  await page.locator('#ai-detect').click();await page.getByRole('button',{name:'Download & Continue'}).click();
   await waitForResult();assert.match(await page.locator('#ai-review').textContent(),/dog/i);
   await page.locator('#ai-accept').click();

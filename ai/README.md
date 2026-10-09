@@ -7,7 +7,7 @@ Version 1.5.0 adds optional, human-reviewed box suggestions to the existing stat
 Open Boundless, or serve the repository with `python3 -m http.server 8000` and open `http://localhost:8000`. No build step or application server is required. Opening `index.html` directly still supports manual annotation; AI modules require HTTP/HTTPS.
 
 1. Add images as usual. AI Assistance starts collapsed; open its heading to reveal Smart Annotate. Opening the panel does not download models.
-2. **Smart Annotate** loads RT-DETR and detects common objects in the active image. Confirm the initial model download. Adjust Detection Confidence and check/uncheck individual suggestions. Click **Accept Selected** to add checked, shown boxes. Hidden suggestions are never accepted. These generic labels may need renaming for your dataset.
+2. Choose **Local Model**: Standard (RT-DETR R18, ~22 MB) or Custom Labels (Grounding DINO Tiny, ~204 MB). For DINO, enter 1–10 comma-separated labels. **Smart Annotate** searches the active image. Confirm the selected model’s download; selecting a model alone does not download it. Adjust Detection Confidence and check/uncheck individual suggestions. Click **Accept Selected** to add checked, shown boxes. Hidden suggestions are never accepted. These generic labels may need renaming for your dataset.
 3. Dashed purple boxes with labels and confidence scores are previews, excluded from exports. Accepted shapes use the existing selection, edit, delete, and export tools. An accepted batch is one Undo step.
 4. **Cancel AI** terminates the worker and discards the unfinished preview. Switching/removing the active image also discards its unaccepted preview and cancels in-flight work. Accepted shapes remain attached to their image. Pan/zoom can be used while inspecting a preview.
 
@@ -19,12 +19,14 @@ AI polygon selection was removed after user testing. The manual Polygon tool and
 - A suggestion is marked **Likely Duplicate** when an accepted box has the same label (case-insensitive) and intersection-over-union of at least 0.8. Such suggestions start unchecked. This is a heuristic, not a guarantee that objects match. Different labels are not suppressed.
 - **Accept Selected** adds only checked suggestions above the confidence threshold. Check a likely duplicate explicitly if you want to keep it.
 - Confidence filtering only hides pending suggestions; it never alters accepted annotations. Checkbox choices persist while filtering. Duplicate status is recomputed against current annotations after edits/undo.
-- The panel keeps only Smart Annotate, confidence, individual suggestion checkboxes, Accept Selected, and Cancel/Clear Preview. A short summary reports shown suggestions and selections. Model-label lists, class filters, bulk buttons, and the long explanation paragraph are omitted to keep the workflow compact.
+- The panel includes the model selector, custom-label field when applicable, Smart Annotate, confidence, individual suggestion checkboxes, Accept Selected, and Cancel/Clear Preview. A short summary reports shown suggestions and selections. Model-label lists, class filters, bulk buttons, and the long explanation paragraph are omitted to keep the workflow compact.
 - Loading is indeterminate overall, with per-file download percentages and a local detection message. Cancel stops computation by terminating the worker (the next run recreates it). Model errors allow retry and never disable manual annotation.
 
 ## Models and privacy
 
 - Runtime: pinned Transformers.js 3.3.3 browser distribution, loaded from jsDelivr on the first AI action.
+- Grounding DINO: `onnx-community/grounding-dino-tiny-ONNX`, revision `ff690b0a8050566c290287545bd059350f3e9096`, q8 (~204 MB), CPU/WASM. A dedicated adapter combines lowercase labels into a period-separated prompt and converts returned boxes to original-image coordinates. Selecting DINO starts the confidence slider at 30%; selecting R18 starts it at 50%. Scores are model-specific and not calibrated probabilities. Text-token threshold is 0.25; box candidates start at 0.1 and the UI confidence slider filters them. DINO may produce label phrases rather than the exact input strings.
+- Consent is per model per page session. Switching models terminates the previous worker to avoid retaining two models in memory. Accepted annotations record the model that produced them.
 - Detection: `onnx-community/rtdetr_r18vd`, revision `ec641af`, q8 weights (~22 MB), CPU/WASM execution for operator compatibility.
 - Weights/configuration download from Hugging Face and may use its asset CDN. These are downloads, not remote inference calls. Uploaded images and annotations are never sent to either provider. The providers still receive ordinary download request metadata such as an IP address.
 - The model/runtime download requires a connection initially. Browser caching may avoid repeat downloads, but offline availability is not guaranteed and caches may be evicted.
@@ -65,3 +67,7 @@ For the real-model integration check, run `TEST_URL=http://localhost:8765 TEST_I
 Upstream references:
 - https://huggingface.co/docs/transformers.js/v3.3.3/en/index
 - https://huggingface.co/onnx-community/rtdetr_r18vd
+
+## Model selector regression checks
+
+Run `tests/model-choice.cjs` against a local static server with Playwright and CHROME_PATH configured. For the optional real-model test, use `TEST_MODEL=dino TEST_IMAGE=/path/to/dog.jpg` with `tests/real-model.cjs`; this explicitly downloads model files. Omit TEST_MODEL to test R18.

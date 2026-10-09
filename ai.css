@@ -16,3 +16,5 @@
 .ai-preview-label{fill:#eee4ff;stroke:#171127;stroke-width:3;paint-order:stroke;stroke-linejoin:round;font-weight:600;vector-effect:non-scaling-stroke}
 #ai-progress{width:100%;height:6px;margin-top:10px;accent-color:#bd99ff}
 #ai-summary{color:#c9b8ff}
+
+.ai-model-options{margin-top:12px}.ai-model-options select,.ai-model-options input{width:100%;min-width:0;background:#111c2c;color:#e7edf7;border:1px solid #40526e;border-radius:6px;padding:9px}.ai-model-options label{display:block;margin:10px 0 5px;font-size:12px}

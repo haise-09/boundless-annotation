@@ -6,6 +6,17 @@
 
 ![Boundless workspace showing Smart Annotate, six car bounding boxes, and annotation editing controls](docs/images/boundless-preview.png)
 
+## Grounding DINO branch experiment
+
+This branch adds a **Local Model** selector inside AI Assistance. Production is unchanged until this experiment is merged.
+
+- **Standard · RT-DETR R18** remains the default (~22 MB of model weights), for common object categories.
+- **Custom Labels · Grounding DINO Tiny** (~204 MB of q8 model weights) searches for labels you enter, such as `building, tower, street lamp`. Enter 1–10 comma-separated labels, then choose Smart Annotate. These are approximate weight sizes; runtime and supporting files add to the download.
+- Only the selected model downloads, after its own confirmation. All inference runs locally in a worker. DINO is experimental and more demanding; desktop testing is recommended. No guaranteed minimum RAM or processing time has been established.
+- Review suggested boxes and use Accept Selected as before. Custom labels are search prompts, not a guarantee of correct detection. No AI polygon/segmentation feature is added.
+- Changing models cancels current work, unloads the worker, and clears unaccepted suggestions. Accepted annotations, exports, and undo history remain intact. Editing search labels also cancels an in-flight search or clears its preview.
+- Browser caching may reuse downloads; clearing storage, private browsing, or cache eviction can require another download. Models come directly from Hugging Face; the runtime comes from jsDelivr.
+
 ## Export scope update
 
 - COCO, VGG, and CSV now offer Current Image and Full Dataset submenus, matching the other formats.
